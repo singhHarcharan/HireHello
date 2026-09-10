@@ -37,7 +37,7 @@ export default function Dashboard() {
     name: "",
     url: "",
     email: "",
-    managerName: "Hiring Manager",
+    managerName: "",
   });
   const [selectedCompanyId, setSelectedCompanyId] = useState<string | null>(
     null
@@ -49,7 +49,9 @@ export default function Dashboard() {
     const template = APPLICATION_TEMPLATE.replace(
       /\[Company Name\]/g,
       company.name
-    ).replace(/\[Hiring Manager's Name\]/g, company.managerName);
+    )
+      .replace(/\[Hiring Manager's Name\]/g, company.managerName)
+      .replace(/\[Candidate First Name\]/g, company.managerName);
 
     // Extract subject from template
     const subject = template.split("\n")[0].replace("Subject: ", "");
@@ -60,10 +62,10 @@ export default function Dashboard() {
 
   // Add a new company to the list
   const handleAddCompany = () => {
-    if (!newCompany.name || !newCompany.email) {
+    if (!newCompany.managerName.trim() || !newCompany.email.trim()) {
       setSendStatus({
         success: false,
-        message: "Company name and email are required",
+        message: "Candidate first name and email are required",
         show: true,
       });
       setTimeout(
@@ -87,12 +89,12 @@ export default function Dashboard() {
       name: "",
       url: "",
       email: "",
-      managerName: "Hiring Manager",
+      managerName: "",
     });
 
     setSendStatus({
       success: true,
-      message: `Added ${newCompany.name} to your list`,
+      message: `Added ${newCompany.managerName} to your list`,
       show: true,
     });
     setTimeout(() => setSendStatus((prev) => ({ ...prev, show: false })), 5000);
@@ -133,7 +135,7 @@ export default function Dashboard() {
 
       setSendStatus({
         success: true,
-        message: `Email sent to ${company.name}!`,
+        message: `Email sent to ${company.managerName}!`,
         show: true,
       });
       setTimeout(
@@ -155,7 +157,7 @@ export default function Dashboard() {
 
       setSendStatus({
         success: false,
-        message: `Failed to send email to ${company.name}: ${
+        message: `Failed to send email to ${company.managerName}: ${
           error instanceof Error ? error.message : "Unknown error"
         }`,
         show: true,
@@ -336,6 +338,10 @@ export default function Dashboard() {
       .replace(
         /(Resume:) (https:\/\/[^\s<]+)/g,
         '<span style="color: #333333; font-weight: 500;">$1</span> <a href="$2" style="color: #2563eb; text-decoration: none;" target="_blank">$2</a>'
+      )
+      .replace(
+        /(Assignment URL:) (https:\/\/[^\s<]+)/g,
+        '<span style="color: #333333; font-weight: 500;">$1</span> <a href="$2" style="color: #2563eb; text-decoration: none;" target="_blank">$2</a>'
       );
 
     // For preview in the UI, return just the formatted content
@@ -451,7 +457,7 @@ export default function Dashboard() {
                   People
                 </h2>
                 <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
-                  {companies.length} {companies.length === 1 ? 'Person' : 'People'}
+                  {companies.length} {companies.length === 1 ? 'Candidate' : 'Candidates'}
                 </span>
               </div>
               <div className="space-y-4">
@@ -463,7 +469,7 @@ export default function Dashboard() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-medium text-foreground">
-                          {company.name}
+                          {company.managerName}
                         </h3>
                         {company.status === "sent" && (
                           <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
@@ -479,6 +485,11 @@ export default function Dashboard() {
                       <p className="text-sm text-foreground/80">
                         {company.email}
                       </p>
+                      {company.name && (
+                        <p className="text-xs text-foreground/60">
+                          Company: {company.name}
+                        </p>
+                      )}
                     </div>
                     <div className="flex items-center space-x-2">
                       <button
@@ -515,11 +526,11 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Add Company Form - Sticky Right Column */}
+          {/* Add Candidate Form - Sticky Right Column */}
           <div className="col-span-1 sticky top-4 h-[calc(100vh-2rem)] overflow-y-auto">
             <div className="rounded-lg border border-accent/20 bg-background/50 backdrop-blur-sm p-6">
               <h2 className="text-lg font-semibold text-foreground mb-4">
-                Add Company
+                Add Candidate
               </h2>
               <form
                 onSubmit={(e) => {
@@ -533,7 +544,7 @@ export default function Dashboard() {
                     htmlFor="name"
                     className="block text-sm font-medium text-foreground/80"
                   >
-                    Company Name
+                    Company Name (Optional)
                   </label>
                   <input
                     type="text"
@@ -546,7 +557,6 @@ export default function Dashboard() {
                       }))
                     }
                     className="mt-1 block w-full rounded-md border border-accent/20 bg-background px-3 py-2 text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-                    required
                   />
                 </div>
                 <div>
@@ -575,7 +585,7 @@ export default function Dashboard() {
                     htmlFor="managerName"
                     className="block text-sm font-medium text-foreground/80"
                   >
-                    Hiring Manager Name
+                    Candidate First Name
                   </label>
                   <input
                     type="text"
@@ -588,13 +598,14 @@ export default function Dashboard() {
                       }))
                     }
                     className="mt-1 block w-full rounded-md border border-accent/20 bg-background px-3 py-2 text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    required
                   />
                 </div>
                 <button
                   type="submit"
                   className="cursor-pointer w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
                 >
-                  Add Company
+                  Add Candidate
                 </button>
               </form>
             </div>
