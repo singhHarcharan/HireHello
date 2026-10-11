@@ -1,28 +1,21 @@
 "use client";
 
 import { useSession } from "next-auth/react";
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function Home() {
-  const {status } = useSession();
-  const router = useRouter();
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      router.push("/dashboard");
-    } else if (status === "unauthenticated") {
-      router.push("/signin");
-    }
-  }, [status, router]);
-
-  // Loading state while checking auth
+  const { status } = useSession();
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <div className="mb-4 h-12 w-12 animate-spin rounded-full border-t-4 border-primary border-opacity-50 mx-auto"></div>
-        <p className="text-lg font-medium text-foreground/80">Loading...</p>
-      </div>
-    </div>
+    <main className="landing">
+      <nav className="topbar"><Link href="/" className="brand">HireHello<span className="brand-dot">.</span></Link><Link className="button button-small" href={status === "authenticated" ? "/dashboard" : "/signin"}>{status === "authenticated" ? "Open dashboard" : "Get started"}</Link></nav>
+      <section className="hero">
+        <div className="eyebrow">Personal outreach, made simpler</div>
+        <h1>Make the first hello count.</h1>
+        <p>Save your résumé and email templates, add the people you want to reach, review every personalized message, then send individual emails from your own Gmail account.</p>
+        <Link className="button" href={status === "authenticated" ? "/dashboard" : "/signin"}>Start with Google <span aria-hidden="true">→</span></Link>
+        <p className="fine-print">You choose your contacts and confirm every campaign before it sends.</p>
+      </section>
+      <section className="feature-row" aria-label="How HireHello works"><div><strong>01</strong><h2>Prepare once</h2><p>Keep your templates and PDF résumés ready.</p></div><div><strong>02</strong><h2>Personalize each</h2><p>Use recruiter and company names in every message.</p></div><div><strong>03</strong><h2>Track progress</h2><p>See which messages Gmail accepted and which need attention.</p></div></section>
+    </main>
   );
 }
