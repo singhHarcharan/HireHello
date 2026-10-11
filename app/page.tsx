@@ -2,20 +2,18 @@
 
 import { useSession } from "next-auth/react";
 import Link from "next/link";
+import { Brand, Icon } from "./components/hirehello/ui";
 
 export default function Home() {
   const { status } = useSession();
-  return (
-    <main className="landing">
-      <nav className="topbar"><Link href="/" className="brand">HireHello<span className="brand-dot">.</span></Link><Link className="button button-small" href={status === "authenticated" ? "/dashboard" : "/signin"}>{status === "authenticated" ? "Open dashboard" : "Get started"}</Link></nav>
-      <section className="hero">
-        <div className="eyebrow">Personal outreach, made simpler</div>
-        <h1>Make the first hello count.</h1>
-        <p>Save your résumé and email templates, add the people you want to reach, review every personalized message, then send individual emails from your own Gmail account.</p>
-        <Link className="button" href={status === "authenticated" ? "/dashboard" : "/signin"}>Start with Google <span aria-hidden="true">→</span></Link>
-        <p className="fine-print">You choose your contacts and confirm every campaign before it sends.</p>
-      </section>
-      <section className="feature-row" aria-label="How HireHello works"><div><strong>01</strong><h2>Prepare once</h2><p>Keep your templates and PDF résumés ready.</p></div><div><strong>02</strong><h2>Personalize each</h2><p>Use recruiter and company names in every message.</p></div><div><strong>03</strong><h2>Track progress</h2><p>See which messages Gmail accepted and which need attention.</p></div></section>
-    </main>
-  );
+  const destination = status === "authenticated" ? "/dashboard" : "/signin";
+  return <main className="landing">
+    <nav className="topbar" aria-label="Main navigation"><Link href="/" aria-label="HireHello home"><Brand /></Link><Link className="button button-secondary button-small" href={destination}>{status === "authenticated" ? "My workspace" : "Get started"}<Icon name="arrow" size={16}/></Link></nav>
+    <section className="landing-hero">
+      <div><span className="hero-kicker"><Icon name="mail" size={14}/>A more personal way to reach out</span><h1>Your next chapter<br/>starts with <em>hello.</em></h1><p>Turn the people you’d love to work with into conversations. Prepare your message once, personalize every introduction, and send it from your Gmail.</p><Link className="button" href={destination}>{status === "authenticated" ? "Open your workspace" : "Start with Google"}<Icon name="arrow" size={17}/></Link><p className="fine-print">Your contacts. Your words. You approve every send.</p></div>
+      <div className="hero-preview" aria-label="Example of a personalized email"><div className="sample-mail"><div className="sample-top"><Icon name="mail" size={18}/><strong>A thoughtful introduction</strong><span className="tag good">Example</span></div><strong className="sample-subject">Exploring opportunities at <mark>Acme</mark></strong><p>Hi <mark>Alex</mark>,</p><p>I’m excited about what your team is building at <mark>Acme</mark>. I’d love to learn how my experience could contribute.</p><p>I’ve attached my résumé. Would you be open to a short conversation?</p><p>Thanks,<br/>Your name</p><div className="sample-attachment"><Icon name="file" size={17}/><span>Your résumé.pdf</span><Icon name="check" size={14}/></div></div><span className="preview-caption"><Icon name="users" size={15}/>One template. An individual email for each person.</span></div>
+    </section>
+    <section className="feature-row" aria-label="How HireHello works"><div><strong>01 / PREPARE</strong><h2>Your essentials, ready to go.</h2><p>Save your email templates and résumés in one place. A good introduction shouldn’t start from scratch.</p></div><div><strong>02 / PERSONALIZE</strong><h2>A hello that feels personal.</h2><p>Add your contacts. Recruiter and company names automatically find their place in every message.</p></div><div><strong>03 / REACH OUT</strong><h2>Review, send, follow along.</h2><p>Preview each email before sending. Track Gmail’s response for every person in your campaign.</p></div></section>
+    <footer className="landing-footer"><span>HireHello · Make the first hello count.</span><span>Built for your next chapter.</span></footer>
+  </main>;
 }

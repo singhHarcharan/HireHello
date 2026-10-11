@@ -343,6 +343,21 @@ Delivery: queued → sending → accepted | failed | skipped | uncertain
       <div class="callout warn"><p><strong>Before public launch:</strong> complete live Google/MongoDB smoke tests, OAuth verification and privacy materials, deployment backups and monitoring, and an account-data export/deletion workflow. The MVP has no reply detection or open tracking because it requests only <code>gmail.send</code>.</p></div>
     </section>
 
+    <section id="ui-update">
+      <div class="eyebrow">Implemented · 12 October 2026</div>
+      <h2>Interface and usability update</h2>
+      <p>The live app now uses a shared visual system with warm neutral surfaces, green actions, Geist typography, and consistent form, card, navigation, and status styles. The welcome page, sign-in screen, and dashboard share the same brand component.</p>
+      <div class="table-wrap"><table><thead><tr><th>Area</th><th>Behavior and purpose</th></tr></thead><tbody>
+        <tr><td>Navigation and overview</td><td>A desktop sidebar becomes five visible navigation buttons on phones. The current section is reflected in the URL so a refresh returns to the same view. The overview offers the next incomplete setup step, a four-part checklist, account status, and recent campaigns.</td></tr>
+        <tr><td>Templates and résumés</td><td>An editable starter template reduces blank-page friction. Buttons insert supported personalization fields into the message. Unsaved drafts can be cleared. Résumé uploads check the PDF extension and 10 MB size in the browser, while the existing server checks remain authoritative. The filename supplies a suggested résumé name.</td></tr>
+        <tr><td>Contacts</td><td>Search by name, email, or company. A downloadable example CSV documents the accepted import format. The existing suppression action is labeled “Block sends” so its effect is clearer.</td></tr>
+        <tr><td>Campaign preparation</td><td>A two-stage indicator connects setup to review. Missing Gmail, template, résumé, or contact requirements link to the relevant setup area. Recipient search and selection stop at 20 contacts; bulk selection respects the current search. A preview with no eligible recipients explains what to do instead of showing a zero-message send action.</td></tr>
+        <tr><td>Feedback and accessibility</td><td>Dismissible status messages, a working indicator, visible keyboard focus, a skip link, labeled controls, reduced-motion styling, and responsive layouts support everyday use. Disconnecting Gmail has an explicit confirmation because it pauses queued campaigns.</td></tr>
+      </tbody></table></div>
+      <p><strong>Code boundaries:</strong> <code>app/components/hirehello/ui.tsx</code> holds the shared brand, SVG icons, and empty-state component. <code>app/globals.css</code> defines design tokens and responsive styles. The dashboard continues to use the existing authenticated API routes; search, setup guidance, and form drafts stay in React state.</p>
+      <p><strong>Browser checks:</strong> reviewed desktop and 390-pixel mobile layouts; exercised starter-template and clear-draft controls, contact search with no matches, recipient selection, and the server preview’s already-contacted exclusion. These checks do not send emails or create a campaign.</p>
+    </section>
+
     <section id="sources">
       <h2>13. Verified platform references</h2>
       <p class="small">Checked 12 October 2026. These official references support the Google integration and sending constraints above; review them again during implementation because Google can change requirements.</p>
