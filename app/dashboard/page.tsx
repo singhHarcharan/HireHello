@@ -10,6 +10,14 @@ type Connection = { connected: boolean; email?: string; status?: string };
 type Review = { senderAddress?: string; resume?: Resume; previews: Preview[]; skipped?: { contactId?: string; reason?: string }[] };
 type ImportResult = { valid: number; duplicate: number; invalid: number; suppressed: number; errors?: { row?: number; message?: string }[] };
 const tabs: { id: Tab; label: string }[] = [{id:"overview",label:"Overview"},{id:"materials",label:"Templates & résumés"},{id:"contacts",label:"Contacts"},{id:"compose",label:"New campaign"},{id:"campaigns",label:"Campaigns"}];
+const gmailConnectionErrors: Record<string, string> = {
+  invalid_state: "This Gmail connection attempt expired or was already used. Click Connect Gmail to start a new one.",
+  denied: "Gmail sending permission was not granted. Click Connect Gmail if you want to try again.",
+  missing_code: "Google did not finish the Gmail connection. Please start a new attempt.",
+  authorization_incomplete: "Google did not provide the offline access needed to send queued messages. Please try connecting again.",
+  account_mismatch: "Choose the same Google account you used to sign in to HireHello.",
+  missing_send_permission: "Allow the Gmail sending permission to connect your mailbox.",
+};
 
 function statusTone(status?: string) {
   if (["accepted","sent","completed","connected"].includes(status || "")) return "good";
@@ -51,7 +59,7 @@ export default function Dashboard() {
   useEffect(() => {
     const gmail = new URLSearchParams(window.location.search).get("gmail");
     if (gmail === "connected") setFeedback({ error: false, message: "Gmail connected. Your mailbox is ready for reviewed campaigns." });
-    else if (gmail && gmail !== "connected") setFeedback({ error: true, message: "Gmail connection could not be completed. Please try again." });
+    else if (gmail && gmail !== "connected") setFeedback({ error: true, message: gmailConnectionErrors[gmail] || "Gmail connection could not be completed. Please try again." });
   }, []);
 
   const refresh = useCallback(async () => {

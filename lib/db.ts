@@ -31,6 +31,7 @@ async function ensureIndexes(db: Db): Promise<void> {
   await Promise.all([
     db.collection('users').createIndex({ googleSub: 1 }, { unique: true }),
     db.collection('google_grants').createIndex({ userId: 1 }, { unique: true }),
+    db.collection('gmail_oauth_attempts').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     db.collection('resumes').createIndex({ userId: 1, createdAt: -1 }),
     db.collection('templates').createIndex({ userId: 1, updatedAt: -1 }),
     db.collection('contacts').createIndex({ userId: 1, emailNormalized: 1 }, { unique: true }),

@@ -15,6 +15,7 @@ For local development, add both authorized redirect URIs to the OAuth client:
 - `http://localhost:3000/api/gmail/callback`
 
 Google's OAuth test mode permits only listed test users. Public use of `gmail.send` may require Google verification.
+Save the OAuth client after adding the Gmail callback. Google Cloud may take several minutes or longer to apply the change; an exact URL match is required. Start a fresh **Connect Gmail** flow after it takes effect rather than reloading an old Google error or callback URL.
 
 ## Start locally
 
