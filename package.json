@@ -12,7 +12,7 @@
     "worker": "tsx worker/index.ts"
   },
   "dependencies": {
-    "@next/env": "^15.5.27",
+    "@next/env": "^16.4.0",
     "@vercel/analytics": "^1.6.1",
     "csv-parse": "^7.0.3",
     "googleapis": "^178.0.0",

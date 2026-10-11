@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>HireHello — Implementation Plan</title>
+  <style>
+    :root { --ink:#15213a; --muted:#5d6b82; --line:#dce3ee; --blue:#315ce8; --blue-soft:#edf2ff; --green:#0e8064; --green-soft:#e8f7f1; --amber:#8a5b0a; --amber-soft:#fff6df; --paper:#fff; --bg:#f5f7fb; --shadow:0 12px 36px rgba(30,48,82,.07); }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    a { color:var(--blue); text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    code { background:#edf1f7; border-radius:4px; padding:2px 5px; font-size:.91em; overflow-wrap:anywhere; }
+    .shell { max-width:1280px; margin:auto; padding:24px; display:grid; grid-template-columns:220px minmax(0,1fr); gap:26px; }
+    .sidebar { position:sticky; top:24px; align-self:start; padding:22px 16px; border:1px solid var(--line); border-radius:18px; background:var(--paper); box-shadow:var(--shadow); }
+    .brand { display:flex; align-items:center; gap:10px; font-weight:800; letter-spacing:-.03em; margin:0 8px 20px; }
+    .mark { width:30px; height:30px; display:grid; place-items:center; border-radius:9px; background:var(--blue); color:#fff; font-size:17px; }
+    .sidebar a { display:block; color:var(--muted); padding:8px 10px; border-radius:8px; font-size:13px; }
+    .sidebar a:hover { background:var(--blue-soft); color:var(--blue); text-decoration:none; }
+    .sidebar small { display:block; color:#8793a6; padding:16px 10px 4px; text-transform:uppercase; font-size:10px; font-weight:800; letter-spacing:.12em; }
+    main { min-width:0; }
+    section, header.hero { background:var(--paper); border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); margin-bottom:18px; padding:30px; }
+    .hero { background:linear-gradient(135deg,#fff 0%,#f0f4ff 100%) !important; padding:38px !important; }
+    .eyebrow { color:var(--blue); font-weight:800; text-transform:uppercase; letter-spacing:.12em; font-size:11px; }
+    h1,h2,h3,h4,p { margin-top:0; }
+    h1 { font-size:clamp(31px,4vw,48px); line-height:1.12; letter-spacing:-.045em; margin:8px 0 16px; max-width:780px; }
+    h2 { font-size:25px; line-height:1.2; letter-spacing:-.03em; margin-bottom:13px; }
+    h3 { font-size:17px; line-height:1.3; margin-bottom:8px; }
+    h4 { font-size:13px; margin-bottom:5px; }
+    p { color:var(--muted); }
+    .lead { font-size:17px; max-width:850px; }
+    .meta, .pills, .actions { display:flex; flex-wrap:wrap; gap:8px; }
+    .pill { display:inline-block; padding:5px 10px; border-radius:999px; font-size:11px; font-weight:700; background:var(--blue-soft); color:#3552a8; }
+    .pill.green { background:var(--green-soft); color:var(--green); }
+    .pill.amber { background:var(--amber-soft); color:var(--amber); }
+    .grid { display:grid; gap:14px; }
+    .g2 { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .g3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .card { border:1px solid var(--line); border-radius:13px; padding:17px; background:#fff; }
+    .card p:last-child, .card ul:last-child { margin-bottom:0; }
+    .callout { border-left:4px solid var(--blue); background:var(--blue-soft); padding:15px 18px; border-radius:0 10px 10px 0; margin:16px 0; }
+    .callout p { margin:0; color:#35466d; }
+    .callout.warn { border-color:#d49225; background:var(--amber-soft); }
+    .callout.warn p { color:#73500d; }
+    ul,ol { padding-left:20px; margin-top:6px; }
+    li { margin:5px 0; }
+    .table-wrap { overflow-x:auto; border:1px solid var(--line); border-radius:12px; }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th,td { text-align:left; vertical-align:top; padding:11px 13px; border-bottom:1px solid var(--line); }
+    th { background:#f6f8fc; color:#394963; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+    tr:last-child td { border-bottom:0; }
+    .flow { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:18px 0; }
+    .flow span { border:1px solid var(--line); padding:10px 12px; border-radius:10px; background:#fff; font-size:12px; font-weight:700; }
+    .flow b { color:#8d9bb3; font-size:16px; }
+    .codebox { background:#101c31; color:#dce7ff; border-radius:12px; padding:18px; overflow:auto; font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; white-space:pre; }
+    .screen { border:1px solid #ccd6e5; border-radius:13px; overflow:hidden; background:#f8faff; box-shadow:0 10px 24px rgba(31,54,90,.08); }
+    .screenbar { height:33px; border-bottom:1px solid #dce4f0; background:#fff; display:flex; align-items:center; gap:5px; padding:0 11px; }
+    .dot { width:7px; height:7px; border-radius:50%; background:#c9d4e3; }
+    .screenname { margin-left:9px; color:#7d8aa0; font-size:10px; }
+    .screenbody { padding:16px; min-height:220px; }
+    .appnav { display:flex; align-items:center; justify-content:space-between; padding-bottom:13px; border-bottom:1px solid #e1e7f0; margin-bottom:15px; font-size:11px; font-weight:800; }
+    .appnav span { color:#7e8da4; font-weight:600; }
+    .mock-h { font-weight:800; font-size:17px; margin-bottom:8px; }
+    .mock-sub { color:#8090a6; font-size:10px; margin-bottom:14px; }
+    .mock-row { display:flex; gap:9px; align-items:center; margin:9px 0; }
+    .mock-field { border:1px solid #d7e0ee; background:#fff; border-radius:7px; min-height:29px; padding:7px 9px; color:#465973; font-size:10px; flex:1; }
+    .mock-label { color:#6b7b91; font-size:9px; font-weight:700; margin-bottom:3px; }
+    .mock-button { display:inline-block; border-radius:7px; background:var(--blue); padding:8px 11px; color:#fff; font-size:10px; font-weight:800; white-space:nowrap; }
+    .mock-button.ghost { background:#eaf0ff; color:var(--blue); }
+    .mock-table { width:100%; background:#fff; border:1px solid #dde5ef; border-radius:8px; overflow:hidden; }
+    .mock-table div { display:grid; grid-template-columns:1.1fr 1.5fr 1fr; gap:6px; padding:7px 9px; border-bottom:1px solid #e9eef6; font-size:9px; color:#687a91; }
+    .mock-table div:last-child { border:0; }
+    .mock-table .head { background:#f1f5fb; color:#455771; font-weight:800; }
+    .mini-status { color:var(--green); font-weight:800; }
+    .steps { counter-reset:step; }
+    .step { position:relative; padding:0 0 18px 43px; border-left:1px solid #dce5f2; margin-left:14px; }
+    .step:last-child { border-left-color:transparent; padding-bottom:0; }
+    .step:before { counter-increment:step; content:counter(step); position:absolute; left:-15px; top:0; width:29px; height:29px; border-radius:50%; display:grid; place-items:center; color:#fff; background:var(--blue); font-weight:800; font-size:11px; }
+    .step p { margin-bottom:0; }
+    .checklist { list-style:none; padding:0; }
+    .checklist li { padding-left:25px; position:relative; }
+    .checklist li:before { content:'✓'; color:var(--green); font-weight:900; position:absolute; left:0; }
+    .small { font-size:12px; }
+    .sources li { word-break:break-word; }
+    @media(max-width:900px) { .shell { display:block; padding:12px; } .sidebar { position:static; margin-bottom:16px; } .sidebar nav { display:flex; flex-wrap:wrap; } .sidebar small { width:100%; } section,header.hero { padding:22px; } .g3 { grid-template-columns:1fr 1fr; } }
+    @media(max-width:650px) { .g2,.g3 { grid-template-columns:1fr; } .hero { padding:25px !important; } .screenbody { min-height:0; } }
+    @media print { body { background:#fff; } .shell { display:block; max-width:none; padding:0; } .sidebar { display:none; } section,header.hero { box-shadow:none; break-inside:avoid; border-color:#cdd5df; } a { color:#264cbd; } }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar" aria-label="Contents">
+    <div class="brand"><div class="mark">↗</div>HireHello <span style="font-size:10px;color:#8c9ab0;font-weight:600">PLAN</span></div>
+    <nav>
+      <small>Product</small>
+      <a href="#overview">Overview and scope</a><a href="#journey">User journey</a><a href="#screens">Frontend designs</a>
+      <small>Engineering</small>
+      <a href="#architecture">Architecture</a><a href="#auth">Google sign-in and Gmail</a><a href="#data">Data model</a><a href="#api">API contract</a><a href="#sending">Sending workflow</a>
+      <small>Delivery</small>
+      <a href="#security">Safety and privacy</a><a href="#build">Build phases</a><a href="#quality">Acceptance criteria</a><a href="#as-built">Backend architecture guide</a><a href="#sources">Sources</a>
+    </nav>
+  </aside>
+  <main>
+    <header class="hero" id="top">
+      <div class="eyebrow">Implementation plan · 12 October 2026</div>
+      <h1>HireHello: make your first hello count.</h1>
+      <p class="lead">A web app where a job seeker signs in with Google, connects Gmail, chooses from saved email templates and résumés, enters multiple recruiter contacts, previews each personalized message, and starts sending to all selected recipients with one click. Each recipient gets a separate email from the user's own Gmail account, even if the browser closes after confirmation.</p>
+      <div class="meta"><span class="pill">Existing Next.js + TypeScript app</span><span class="pill">Background Node.js worker</span><span class="pill">MongoDB</span><span class="pill green">Small-group first release</span></div>
+    </header>
+
+    <section id="overview">
+      <h2>1. Product scope</h2>
+      <div class="grid g3">
+        <div class="card"><h3>Core promise</h3><p>Prepare one campaign, personalize only the recruiter name and company name, then send individual messages without repeatedly composing the same email.</p></div>
+        <div class="card"><h3>Primary user</h3><p>A job seeker with their own Gmail or Google Workspace mailbox and a list of relevant recruiter or hiring manager email addresses.</p></div>
+        <div class="card"><h3>MVP success</h3><p>A user can send a small campaign to distinct contacts, see a separate result for each, and avoid accidental repeat sends.</p></div>
+      </div>
+      <div class="callout"><p><strong>First-release decision:</strong> Support fewer than 20 invited users, multiple saved templates and PDF résumés, and one-click sending to multiple user-supplied recruiters. A server-side worker continues the queue after the user closes the tab. The user can reopen HireHello to see progress, failures, and any action needed; notifications can be added later.</p></div>
+      <h3 style="margin-top:23px">MVP features</h3>
+      <div class="table-wrap"><table><thead><tr><th>Area</th><th>Required behavior</th><th>First release decision</th></tr></thead><tbody>
+        <tr><td>Account</td><td>Google sign-in; separate Gmail send authorization; reconnect and disconnect controls.</td><td>One Google mailbox per user.</td></tr>
+        <tr><td>Résumés</td><td>Upload, label, list, replace, delete, and choose a résumé for a campaign.</td><td>PDF only; private storage; 10 MB limit.</td></tr>
+        <tr><td>Templates</td><td>Save subject and plain-text body with <code>{{recruiterName}}</code>, <code>{{companyName}}</code>, <code>{{senderName}}</code>.</td><td>Multiple templates; no AI writing required.</td></tr>
+        <tr><td>Contacts</td><td>Add rows manually or import CSV with email, recruiter name, and company name.</td><td>Validate, show row errors, deduplicate within the upload and against prior sends.</td></tr>
+        <tr><td>Campaign</td><td>Pick a saved template and résumé, review every rendered message, send a test to self, then confirm the recipient count.</td><td>One click creates individual queued emails; the worker continues after browser closure.</td></tr>
+        <tr><td>Tracking</td><td>Show queued, sending, accepted by Gmail, failed, skipped, and uncertain states per recipient.</td><td>Do not claim delivery, opens, or replies without extra Gmail permissions.</td></tr>
+        <tr><td>Controls</td><td>Pause remaining queue, block contacts who opt out, export results, delete account data.</td><td>No scraping or contact discovery in MVP.</td></tr>
+      </tbody></table></div>
+      <div class="callout"><p><strong>Scope boundary:</strong> This is an outreach tool for contacts the user supplies. Job discovery, recruiter scraping, automated follow-ups, reply detection, and AI personalization can be later releases.</p></div>
+    </section>
+
+    <section id="journey">
+      <h2>2. User journey</h2>
+      <div class="flow"><span>Sign in with Google</span><b>→</b><span>Connect Gmail</span><b>→</b><span>Upload résumé</span><b>→</b><span>Create template</span><b>→</b><span>Add contacts</span><b>→</b><span>Preview and test</span><b>→</b><span>Confirm send</span><b>→</b><span>Review results</span></div>
+      <div class="grid g2">
+        <div class="card"><h3>Before sending</h3><ul><li>Show the sender Gmail address clearly.</li><li>Reject empty or malformed addresses and missing merge fields.</li><li>Display contact count, duplicates, opt-outs, chosen résumé, and exact subject/body preview.</li><li>Require explicit confirmation: “Send X individual emails.”</li></ul></div>
+        <div class="card"><h3>After clicking send</h3><ul><li>Create a campaign snapshot and one delivery record per contact.</li><li>Queue messages and show live progress as the worker sends.</li><li>Allow the user to pause unsent items.</li><li>Keep successes and failures visible, with a safe retry path for known failures.</li></ul></div>
+      </div>
+    </section>
+
+    <section id="screens">
+      <h2>3. Simple frontend designs</h2>
+      <p>Use a compact dashboard with one primary action per screen. These are low-fidelity layouts; the first build can use native form controls and a small component set.</p>
+      <div class="grid g2">
+        <div><h3>A · Welcome and Gmail connection</h3><div class="screen"><div class="screenbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="screenname">hirehello.example / welcome</span></div><div class="screenbody"><div class="appnav">↗ HireHello <span>Help</span></div><div class="mock-h">Make thoughtful outreach easier.</div><div class="mock-sub">Sign in to save your templates, résumés, and campaigns.</div><div class="mock-button">Continue with Google</div><div class="mock-row" style="margin-top:20px"><div class="mock-field">✓ Account connected<br><span style="color:#8b99ad">Gmail sending permission is requested separately.</span></div></div><div class="mock-button ghost">Connect Gmail to send</div></div></div></div>
+        <div><h3>B · Dashboard</h3><div class="screen"><div class="screenbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="screenname">hirehello.example / dashboard</span></div><div class="screenbody"><div class="appnav">↗ HireHello <span>Templates &nbsp; Résumés &nbsp; Contacts &nbsp; Settings</span></div><div class="mock-h">Good morning, Aisha</div><div class="mock-sub">Connected: aisha@gmail.com</div><div class="mock-row"><div class="mock-field"><strong>3</strong><br>campaigns</div><div class="mock-field"><strong>24</strong><br>accepted by Gmail</div><div class="mock-field"><strong>2</strong><br>need attention</div></div><div class="mock-button">New campaign</div><div class="mock-row"><div class="mock-field">Recent campaign · Product design roles <span class="mini-status">Completed</span></div></div></div></div></div>
+        <div><h3>C · Template and résumé library</h3><div class="screen"><div class="screenbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="screenname">hirehello.example / library</span></div><div class="screenbody"><div class="appnav">↗ HireHello <span>Dashboard &nbsp; Campaigns</span></div><div class="mock-h">Your materials</div><div class="mock-row"><div class="mock-field">Template: Referral request<br><span style="color:#8b99ad">Subject: Exploring roles at {{companyName}}</span></div><div class="mock-button ghost">Edit</div></div><div class="mock-row"><div class="mock-field">Résumé: Software engineer · 2026.pdf</div><div class="mock-button ghost">Replace</div></div><div class="mock-button">+ New template</div> <div class="mock-button ghost">+ Upload PDF</div></div></div></div>
+        <div><h3>D · New campaign: contacts</h3><div class="screen"><div class="screenbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="screenname">hirehello.example / campaigns / new</span></div><div class="screenbody"><div class="appnav">↗ HireHello <span>1 Contacts → 2 Materials → 3 Preview</span></div><div class="mock-h">Who are you contacting?</div><div class="mock-sub">Upload CSV or add rows manually. One message is sent to each address.</div><div class="mock-button ghost">Upload CSV</div><div class="mock-table" style="margin-top:12px"><div class="head"><span>Name</span><span>Email</span><span>Company</span></div><div><span>Priya</span><span>priya@example.com</span><span>Northstar</span></div><div><span>Daniel</span><span>daniel@example.com</span><span>Orbit Labs</span></div></div><div class="mock-row"><span class="mock-sub" style="flex:1;margin:0">2 valid · 0 duplicates · 0 blocked</span><div class="mock-button">Continue</div></div></div></div></div>
+        <div><h3>E · Review and send</h3><div class="screen"><div class="screenbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="screenname">hirehello.example / campaigns / preview</span></div><div class="screenbody"><div class="appnav">↗ HireHello <span>1 Contacts ✓ &nbsp; 2 Materials ✓ &nbsp; 3 Preview</span></div><div class="mock-h">Review each message</div><div class="mock-row"><div class="mock-field">From: aisha@gmail.com</div><div class="mock-field">Résumé: Software engineer.pdf</div></div><div class="mock-field">To: Priya &lt;priya@example.com&gt;<br>Subject: Exploring roles at Northstar<br><br>Hi Priya,<br>I’m reaching out about software roles at Northstar…</div><div class="mock-row"><div class="mock-button ghost">Send test to myself</div><div class="mock-button">Confirm and send 2 emails</div></div></div></div></div>
+        <div><h3>F · Campaign results</h3><div class="screen"><div class="screenbar"><i class="dot"></i><i class="dot"></i><i class="dot"></i><span class="screenname">hirehello.example / campaigns / 123</span></div><div class="screenbody"><div class="appnav">↗ HireHello <span>Dashboard &nbsp; Campaigns</span></div><div class="mock-h">Product design roles</div><div class="mock-sub">1 accepted · 1 queued · 0 failed</div><div class="mock-button ghost">Pause remaining emails</div><div class="mock-table" style="margin-top:13px"><div class="head"><span>Contact</span><span>Company</span><span>Status</span></div><div><span>Priya</span><span>Northstar</span><span class="mini-status">Accepted</span></div><div><span>Daniel</span><span>Orbit Labs</span><span>Queued</span></div></div><div class="mock-sub" style="margin-top:10px">Accepted means Gmail accepted the send request; delivery is not confirmed.</div></div></div></div>
+      </div>
+      <div class="callout"><p><strong>Responsive behavior:</strong> On phones, stack the form fields and campaign summary; turn result tables into contact cards. Keep the confirm button visible after the preview. All forms need keyboard labels, error text, and clear loading states.</p></div>
+    </section>
+
+    <section id="architecture">
+      <h2>4. Technical architecture</h2>
+      <div class="codebox">Browser (Next.js React UI)
+     │ HTTPS; secure session cookie
+     ▼
+Next.js Node server (TypeScript)
+     ├── Google OAuth callback + session
+     ├── API route handlers / server services
+     ├── validation + campaign snapshot
+     └── MongoDB: users, templates, contacts, campaigns, deliveries, GridFS PDFs
+                                  │ atomic job claim
+                                  ▼
+                         Dedicated Node worker
+                                  │ OAuth refresh + MIME PDF attachment
+                                  ▼
+                       Gmail API users.messages.send</div>
+      <div class="grid g2" style="margin-top:16px">
+        <div class="card"><h3>Suggested stack</h3><ul><li><strong>Web:</strong> Extend the existing Next.js App Router and TypeScript app; use its current styling approach.</li><li><strong>Validation:</strong> Zod shared between forms and server inputs.</li><li><strong>Database:</strong> MongoDB with the official Node driver; private PDF storage, including an immutable campaign attachment snapshot.</li><li><strong>Google:</strong> Reuse the existing NextAuth sign-in with identity scopes; request only <code>gmail.send</code> when connecting Gmail, and store Gmail refresh tokens only on the server.</li><li><strong>Worker:</strong> One persistent Node.js process in the same repository atomically claims queued deliveries from MongoDB.</li></ul></div>
+        <div class="card"><h3>Why a separate worker?</h3><p>One click can start many individual API calls. The HTTP request only saves the approved campaign and returns; the worker sends at a controlled pace and records each result. It keeps running after the browser closes. Use a host that supports a long-running process and restart it automatically if it exits. MongoDB polling is sufficient for this small group.</p><p><strong>Deployment:</strong> Next.js web service + one Node worker + managed MongoDB. Keep secrets and PDF storage private.</p></div>
+      </div>
+      <h3 style="margin-top:22px">Proposed repository layout</h3>
+      <div class="codebox">app/                  Existing Next.js routes, pages, components, API handlers
+worker/               Queue claim, Gmail sender, retry policy
+lib/                  Shared validation, template renderer, database services
+docs/                 OAuth setup and operating notes</div>
+    </section>
+
+    <section id="auth">
+      <h2>5. Google sign-in and Gmail authorization</h2>
+      <div class="steps">
+        <div class="step"><h3>Google account sign-in</h3><p>Use OpenID Connect <code>openid email profile</code> to identify the user. Validate the ID token on the server and create a secure, HTTP-only application session. Do not treat a Google ID token as permission to send email.</p></div>
+        <div class="step"><h3>Ask for Gmail access when needed</h3><p>On “Connect Gmail,” request only <code>https://www.googleapis.com/auth/gmail.send</code>. This is a <strong>sensitive</strong> scope; a public app generally needs Google OAuth verification. The user should see which mailbox will send.</p></div>
+        <div class="step"><h3>Server-side authorization code exchange</h3><p>Use OAuth <code>state</code> and PKCE where supported; exchange the code only on the server. Request <code>access_type=offline</code> so the worker can refresh access tokens while the queue runs. Encrypt the refresh token at rest; never send it to the browser.</p></div>
+        <div class="step"><h3>Disconnect and reauthorize</h3><p>Allow token revocation, deletion of stored credentials, and reconnection. If Google rejects a token, pause the user's queue and display “Reconnect Gmail.”</p></div>
+      </div>
+      <div class="callout warn"><p><strong>Release gate:</strong> Create a Google Cloud project, configure the OAuth consent screen, enable Gmail API, publish a privacy policy, and complete Google's verification for the Gmail send scope before broad public launch. Development can use authorized test users. Check current Google requirements during submission.</p></div>
+    </section>
+
+    <section id="data">
+      <h2>6. MongoDB data model</h2>
+      <div class="table-wrap"><table><thead><tr><th>Collection</th><th>Important fields</th><th>Key rules / indexes</th></tr></thead><tbody>
+        <tr><td><code>users</code></td><td><code>_id, googleSub, email, displayName, createdAt, deletedAt</code></td><td>Unique <code>googleSub</code>; do not key identity solely by email.</td></tr>
+        <tr><td><code>google_grants</code></td><td><code>userId, gmailAddress, scopes, encryptedRefreshToken, status, updatedAt</code></td><td>Unique user; encryption key kept outside DB; no token in logs.</td></tr>
+        <tr><td><code>resumes</code></td><td><code>userId, label, gridFsFileId, sha256, size, mimeType, createdAt</code></td><td>Owner-scoped; file private; delete binary on deletion.</td></tr>
+        <tr><td><code>templates</code></td><td><code>userId, name, subject, bodyText, version, updatedAt</code></td><td>Only allowed merge fields; no raw HTML in MVP.</td></tr>
+        <tr><td><code>contacts</code></td><td><code>userId, emailNormalized, recruiterName, companyName, status, createdAt</code></td><td>Unique per user/email; normalize email carefully; mark opt-outs.</td></tr>
+        <tr><td><code>campaigns</code></td><td><code>userId, name, templateSnapshot, resumeSnapshotFileId, senderAddress, status, totals, createdAt</code></td><td>Keep an immutable private copy of the selected PDF for this campaign; owner-scoped.</td></tr>
+        <tr><td><code>deliveries</code></td><td><code>campaignId, userId, contactId, to, renderedSubject, renderedBody, status, attemptCount, leaseUntil, gmailMessageId, errorCode, sentAt</code></td><td>Unique <code>(campaignId, contactId)</code>; index <code>(status, leaseUntil)</code>.</td></tr>
+        <tr><td><code>suppressions</code></td><td><code>userId, emailNormalized, reason, createdAt</code></td><td>Unique per user/email; checked again immediately before sending.</td></tr>
+      </tbody></table></div>
+      <p class="small" style="margin-top:11px">Use a transaction for campaign creation plus delivery rows when available. Store the final rendered subject/body and a private copy of the selected PDF at enqueue time so later template edits or résumé replacement cannot change already approved messages.</p>
+    </section>
+
+    <section id="api">
+      <h2>7. Backend API contract</h2>
+      <div class="table-wrap"><table><thead><tr><th>Method and route</th><th>Purpose</th><th>Important behavior</th></tr></thead><tbody>
+        <tr><td><code>/api/auth/[...nextauth]</code></td><td>Existing Google sign-in</td><td>Identity scopes only; secure session cookie; no Gmail token in the browser session.</td></tr>
+        <tr><td><code>GET /api/gmail/connect</code><br><code>GET /api/gmail/callback</code></td><td>Authorize <code>gmail.send</code></td><td>Verify same signed-in Google identity; encrypt refresh token.</td></tr>
+        <tr><td><code>DELETE /api/gmail/connection</code></td><td>Disconnect</td><td>Revoke grant, delete token, pause queued sends.</td></tr>
+        <tr><td><code>GET/POST /api/resumes</code><br><code>DELETE /api/resumes/:id</code></td><td>Résumé library</td><td>PDF MIME + signature check; size cap; owner checks.</td></tr>
+        <tr><td><code>GET/POST /api/templates</code><br><code>PATCH/DELETE /api/templates/:id</code></td><td>Template library</td><td>Validate placeholder whitelist and length.</td></tr>
+        <tr><td><code>POST /api/contacts/import</code><br><code>GET/PATCH /api/contacts</code></td><td>CSV/manual contacts</td><td>Return valid, duplicate, invalid, and suppressed counts.</td></tr>
+        <tr><td><code>POST /api/campaigns/preview</code></td><td>Dry run</td><td>Render all rows server-side; return errors and sample/all previews; no send.</td></tr>
+        <tr><td><code>POST /api/campaigns</code></td><td>Confirm send</td><td>CSRF protection, confirmation payload, idempotency key, immutable snapshot.</td></tr>
+        <tr><td><code>GET /api/campaigns/:id</code><br><code>GET /api/campaigns/:id/deliveries</code></td><td>Progress</td><td>Owner-scoped, paginated, poll every few seconds initially.</td></tr>
+        <tr><td><code>POST /api/campaigns/:id/pause</code></td><td>Pause queue</td><td>Stop future claims; in-flight send may finish.</td></tr>
+        <tr><td><code>POST /api/campaigns/:id/resume</code></td><td>Resume queue</td><td>Requires the original Gmail account to be connected and queued messages to remain.</td></tr>
+        <tr><td><code>POST /api/campaigns/test</code></td><td>Test to self</td><td>Send only to the connected user's own Gmail address; three test sends per rolling day.</td></tr>
+        <tr><td><code>POST /api/deliveries/:id/retry</code></td><td>Retry a known failure</td><td>Never auto-retry an uncertain send outcome.</td></tr>
+      </tbody></table></div>
+      <p class="small" style="margin-top:10px">Use structured error responses: <code>{ code, message, fieldErrors? }</code>. Every route checks session and ownership server-side. Add per-user request limits to import, preview, and campaign creation.</p>
+    </section>
+
+    <section id="sending">
+      <h2>8. Reliable sending workflow</h2>
+      <div class="steps">
+        <div class="step"><h3>Validate and snapshot</h3><p>At confirmation, recheck the Gmail grant, résumé, template, email syntax, duplicate recipients, opt-outs, and campaign cap. Render all merge fields. Store one delivery row per recipient with the exact text the user approved, and snapshot the selected PDF once for the campaign. Return immediately after saving the queue.</p></div>
+        <div class="step"><h3>Claim one delivery safely</h3><p>Worker uses an atomic <code>findOneAndUpdate</code> with a lease to claim a queued row. Limit concurrency to one send per Gmail account initially and pace sends conservatively. User-specific daily limits should be lower than Google's maximum and configurable later.</p></div>
+        <div class="step"><h3>Build and send individual MIME messages</h3><p>Use a MIME builder to create <code>text/plain</code> plus the selected PDF attachment, encode as base64url, and call Gmail <code>users.messages.send</code> once per contact. Each message has one <code>To</code> address, not a shared CC/BCC list.</p></div>
+        <div class="step"><h3>Record outcomes carefully</h3><p>Store Gmail's message ID and mark <em>accepted by Gmail</em> after a successful API response. For explicit 4xx/429/5xx errors, classify retryable versus permanent and use backoff where appropriate. A timeout after submission is <em>uncertain</em>: do not automatically resend, because Gmail send has no application-level idempotency key.</p></div>
+        <div class="step"><h3>Pause on account or policy problems</h3><p>On revoked access, permission denial, or daily send limit, pause that user's remaining queue and show a clear action. A pause request prevents new claims but cannot unsend a message already in flight.</p></div>
+      </div>
+      <div class="callout"><p><strong>Status language:</strong> “Accepted by Gmail” means the API accepted the request. It does not prove inbox delivery or that a recruiter read the email. Reading replies would need additional Gmail scope and a separate product decision.</p></div>
+    </section>
+
+    <section id="security">
+      <h2>9. Privacy, deliverability, and abuse controls</h2>
+      <div class="grid g2">
+        <div class="card"><h3>Protect user data</h3><ul><li>HTTPS, secure HTTP-only SameSite session cookies, CSRF defense, input validation, and owner checks.</li><li>Encrypt Gmail refresh tokens with a managed secret/KMS key; keep credentials out of logs and analytics.</li><li>Private PDFs; file-type and size validation; malware scan if accepting broader file types later.</li><li>Minimal retention, user export/deletion, and a clear privacy policy.</li></ul></div>
+        <div class="card"><h3>Respect recipients</h3><ul><li>User imports contacts they have a legitimate reason to approach; no scraped lists in MVP.</li><li>Send relevant, accurate, individually addressed messages; no misleading subjects or impersonation.</li><li>Maintain an opt-out/suppression list and prevent repeat outreach to opted-out contacts.</li><li>Start with small paced campaigns; watch Gmail errors and stop on unusual bounce or limit signals.</li></ul></div>
+      </div>
+      <div class="callout warn"><p><strong>Important constraint:</strong> Gmail prohibits spam and unsolicited commercial mail, and sending limits apply to both personal and Workspace accounts. The product should make targeted professional outreach easy, not promise unlimited bulk sending. Review applicable email rules in the launch countries before release.</p></div>
+    </section>
+
+    <section id="build">
+      <h2>10. Build sequence</h2>
+      <div class="table-wrap"><table><thead><tr><th>Phase</th><th>Deliverables</th><th>Exit check</th></tr></thead><tbody>
+        <tr><td><strong>0 · Setup</strong><br>2–3 days</td><td>Extend the existing repository, add MongoDB and a worker process, configure Google Cloud and the Gmail API, and add environment configuration and local fixtures.</td><td>Local app and worker boot; test Google account can complete consent.</td></tr>
+        <tr><td><strong>1 · Identity</strong><br>3–5 days</td><td>Fix the existing NextAuth flow: request identity scopes at sign-in and only <code>gmail.send</code> when connecting Gmail; keep tokens out of browser sessions and logs, persist an encrypted server-side grant, and support reconnect/disconnect.</td><td>Worker can send one test message from the connected user's mailbox without exposing a token to the browser.</td></tr>
+        <tr><td><strong>2 · Materials</strong><br>3–4 days</td><td>PDF résumé library, plain-text template CRUD, variable renderer, test-to-self.</td><td>Rendered sample has correct name/company and attached PDF.</td></tr>
+        <tr><td><strong>3 · Contacts + preview</strong><br>3–5 days</td><td>Manual rows, CSV import, validation, dedupe, suppression, campaign wizard and previews.</td><td>Bad rows never enter a campaign; every outgoing variant is reviewable.</td></tr>
+        <tr><td><strong>4 · Sending + results</strong><br>5–7 days</td><td>Atomic queue worker, pacing, Gmail send, progress UI, pause, safe retries, export, and worker restart on process failure.</td><td>Partial failure is reported per contact; repeated click cannot duplicate a campaign; queued sends continue after the browser closes.</td></tr>
+        <tr><td><strong>5 · Release</strong><br>3–5 days + Google review</td><td>Security review, accessibility pass, backups, monitoring, privacy policy, deployment, OAuth verification submission.</td><td>Production smoke test with a small authorized campaign; Google approval before public launch.</td></tr>
+      </tbody></table></div>
+      <p class="small" style="margin-top:12px"><strong>Planning estimate:</strong> roughly 4–6 weeks for one experienced full-stack developer, excluding Google's external verification time. Build phases 1–4 first; spend polish time only after the end-to-end send works reliably.</p>
+      <h3 style="margin-top:24px">Later releases</h3>
+      <div class="pills"><span class="pill">Follow-up reminders</span><span class="pill">Reply detection with new consent</span><span class="pill">Scheduled sending</span><span class="pill">DOCX support</span><span class="pill">AI drafting with review</span><span class="pill">Multiple Gmail accounts</span><span class="pill">Contact tags and search</span></div>
+    </section>
+
+    <section id="quality">
+      <h2>11. Acceptance criteria and test plan</h2>
+      <ul class="checklist">
+        <li>User can sign in and connect the same Google mailbox for sending; disconnection stops new sends.</li>
+        <li>User can save two templates, upload two PDFs, and choose one of each for a campaign.</li>
+        <li>CSV import identifies invalid emails, duplicate rows, and suppressed contacts before confirmation.</li>
+        <li>Preview substitutes only supported variables and shows exact subject/body for each recipient.</li>
+        <li>Two valid contacts produce two separate Gmail messages with their own To header and the chosen PDF.</li>
+        <li>Double-click or repeated network submission creates one campaign via an idempotency key.</li>
+        <li>Worker restart resumes queued work; an uncertain send result is held for review rather than resent.</li>
+        <li>After campaign confirmation, closing the browser does not stop queued sends; reopening the app shows current results.</li>
+        <li>Pause prevents unsent deliveries from being claimed; in-flight behavior is explained in the UI.</li>
+        <li>Another signed-in user cannot read the first user's contacts, résumé, template, token, or campaign.</li>
+        <li>Rate-limit, revoked-token, oversized-PDF, and Gmail-error paths display actionable states.</li>
+      </ul>
+      <p><strong>Test mix:</strong> unit tests for CSV parsing and template rendering; API integration tests for ownership, idempotency and campaign snapshots; worker tests with a Gmail API stub for success, 429, token revocation and ambiguous timeout; one small live end-to-end send using test accounts.</p>
+    </section>
+
+    <section id="as-built">
+      <div class="eyebrow">Implemented in the repository · 12 October 2026</div>
+      <h2>12. Backend architecture guide</h2>
+      <p>This section describes the code that now exists, including the reason for each component and the path a campaign takes through the system. Sections 1–11 remain the product plan. The implementation is a small-group MVP; live Google consent, a real MongoDB instance, deployment, and public OAuth verification still require environment setup.</p>
+
+      <h3>12.1 Processes and responsibilities</h3>
+      <div class="flow"><span>React dashboard</span><b>→</b><span>Next.js API routes</span><b>→</b><span>MongoDB + private GridFS PDFs</span><b>→</b><span>persistent Node worker</span><b>→</b><span>Gmail API</span></div>
+      <div class="grid g2">
+        <div class="card"><h4>Next.js web process</h4><p><code>app/dashboard/page.tsx</code> calls routes under <code>app/api</code>. These routes authenticate the request, validate inputs, apply ownership checks, and save durable data. The send button returns after queue creation; it does not hold an HTTP request open while Gmail sends every message. This keeps the interface responsive and lets sending continue after the browser closes.</p></div>
+        <div class="card"><h4>Node worker</h4><p><code>worker/index.ts</code> runs as a separate persistent process with the same secrets and MongoDB connection. It polls for queued deliveries, claims one atomically, prepares MIME, calls Gmail, and records the outcome. A separate process avoids web-request timeouts and gives one place to control pacing. Run one worker for this first release.</p></div>
+        <div class="card"><h4>MongoDB</h4><p><code>lib/db.ts</code> opens one reusable client and creates indexes. Collections hold user-owned contacts, templates, résumés, grants, campaigns, deliveries, and suppressions. MongoDB is both application storage and the small queue: an atomic row claim prevents two worker iterations from claiming the same delivery.</p></div>
+        <div class="card"><h4>GridFS</h4><p>The <code>resumeFiles</code> bucket stores private PDFs in MongoDB chunks. The campaign route copies the chosen file to a new snapshot before exposing queued deliveries to the worker. Editing or deleting a library résumé later cannot silently change an already approved attachment.</p></div>
+      </div>
+
+      <h3 style="margin-top:22px">12.2 Identity and authorization: why two Google flows?</h3>
+      <ol>
+        <li><strong>Sign-in:</strong> <code>app/api/auth/[...nextauth]/auth-options.ts</code> uses NextAuth Google sign-in with <code>openid email profile</code>. The JWT session contains the Google subject ID (<code>sub</code>) as <code>session.user.id</code>. The subject is a stable account identifier; email addresses can change. The browser session has no Gmail access or refresh token.</li>
+        <li><strong>Gmail connection:</strong> <code>GET /api/gmail/connect</code> starts another authorization-code request for <code>gmail.send</code> and offline access. The app sets short-lived, HTTP-only state and PKCE cookies. The callback checks state, exchanges the code on the server, validates the Google ID token, requires the same <code>sub</code> as the signed-in session, and verifies the send scope.</li>
+        <li><strong>Stored grant:</strong> <code>lib/gmail/crypto.ts</code> encrypts the refresh token with AES-256-GCM using a 32-byte key from <code>GMAIL_TOKEN_ENCRYPTION_KEY</code>. The <code>google_grants</code> document stores ciphertext, mailbox address, scopes, and connection status. The worker decrypts only when it needs to refresh an access token. The encryption key must stay outside MongoDB and must be backed up separately.</li>
+        <li><strong>Disconnect and recovery:</strong> <code>DELETE /api/gmail/connection</code> pauses queued campaigns, deletes the local grant, and asks Google to revoke it. A revoked or invalid grant changes to a reconnect-required state and pauses work. Once the same account reconnects, the user can explicitly resume a paused campaign.</li>
+      </ol>
+      <p>Separate consent lets a person explore HireHello before granting sending rights. It also limits the initial sign-in permission. The worker can continue after the browser closes because it holds a server-side refresh grant, not a browser access token.</p>
+
+      <h3>12.3 Data boundaries and important indexes</h3>
+      <div class="table-wrap"><table><thead><tr><th>Storage</th><th>What it contains</th><th>Why the boundary matters</th></tr></thead><tbody>
+        <tr><td><code>templates</code>, <code>resumes</code>, <code>contacts</code></td><td>Reusable user materials and normalized recipient addresses.</td><td>Every API lookup includes <code>userId</code>. Contact email has a per-user unique index; a user's library is not visible to another account.</td></tr>
+        <tr><td><code>campaigns</code></td><td>Campaign name, selected template copy, sender address, PDF snapshot ID, status, counters, idempotency key and request hash.</td><td>The key is unique per user. Repeating the same confirmation returns the first result; reusing the key with different input is rejected.</td></tr>
+        <tr><td><code>deliveries</code></td><td>One recipient and rendered subject/body per row, status, attempts, lease, Gmail message ID, timestamps and error code.</td><td>A partial unique index blocks a recipient from another queued, sending, accepted, or uncertain send. The worker claims one row by atomic update.</td></tr>
+        <tr><td><code>suppressions</code></td><td>Per-user normalized email and reason.</td><td>Checked at preview, queue creation, and again immediately before send so an opt-out can stop pending work.</td></tr>
+        <tr><td><code>google_grants</code></td><td>Encrypted refresh token and mailbox metadata.</td><td>Only server and worker code read this collection; public response objects omit secrets and internal file IDs.</td></tr>
+        <tr><td><code>test_sends</code></td><td>Own-mailbox test send status, idempotency key, and timestamp.</td><td>Prevents a repeated click from sending twice and enforces the small daily test limit.</td></tr>
+      </tbody></table></div>
+      <p class="small" style="margin-top:10px">The plan's <code>users</code> collection is reserved by an index, but the MVP identifies owners directly by the Google subject in the NextAuth session and does not write user profiles. The campaign route uses a temporary <code>preparing</code> state and cleanup if snapshot or delivery insertion fails. That is a compensating write sequence rather than a MongoDB transaction. A production rollout should use a replica set transaction or add a recovery job for abandoned <code>preparing</code> rows.</p>
+
+      <h3>12.4 Request-to-send walkthrough</h3>
+      <div class="steps">
+        <div class="step"><h3>Save materials</h3><p><code>/api/templates</code> validates plain-text subject/body and a fixed merge-field allowlist. <code>/api/resumes</code> accepts only PDF uploads up to 10 MB, checks the PDF header, hashes the bytes, and stores them privately in GridFS. <code>/api/contacts</code> adds manual rows; <code>/api/contacts/import</code> parses CSV, counts invalid/duplicate/suppressed rows, and stores valid contacts.</p></div>
+        <div class="step"><h3>Preview</h3><p><code>POST /api/campaigns/preview</code> loads only records owned by the session's Google subject. It checks Gmail connection, contact state, suppression and earlier outreach; then substitutes <code>{{recruiterName}}</code>, <code>{{companyName}}</code>, and <code>{{senderName}}</code>. Preview writes no campaign or email.</p></div>
+        <div class="step"><h3>Test to self</h3><p><code>POST /api/campaigns/test</code> renders the chosen template and résumé into one message addressed only to the connected Gmail address. It stores a test-send idempotency key before calling Gmail and limits tests to three in 24 hours. If the Gmail response is lost, it records an uncertain result and asks the user to check Sent Mail.</p></div>
+        <div class="step"><h3>Confirm and enqueue</h3><p><code>POST /api/campaigns</code> repeats the server validation because a preview can become stale. It requires an <code>Idempotency-Key</code>, enforces a small campaign and creation rate limit, copies the PDF, stores each final rendered message, and marks the campaign queued. The API returns the campaign and delivery rows for display.</p></div>
+        <div class="step"><h3>Claim and send</h3><p>The worker atomically changes one eligible row from <code>queued</code> to <code>sending</code> with a lease. It rechecks campaign status, Gmail grant, suppression, and the per-account 24-hour cap. It builds a plain-text multipart MIME message with one <code>To</code> address and the PDF snapshot, encodes it base64url, and calls <code>users.messages.send</code>. Default pacing is 15 seconds between claims and 20 accepted messages per rolling 24 hours.</p></div>
+        <div class="step"><h3>Record outcomes</h3><p>Gmail success stores its message ID and marks the row <code>accepted</code>. Explicit retryable errors are requeued with backoff up to an attempt cap. Credential and send-limit errors pause work. A transport timeout or expired worker lease is <code>uncertain</code>, because Gmail may already have sent the message; it is never automatically resent. The dashboard polls campaign results and supports pause, resume, and retry of known failures.</p></div>
+      </div>
+
+      <h3 style="margin-top:22px">12.5 Status model and failure decisions</h3>
+      <div class="codebox">Campaign: preparing → queued → completed
+                         ↘ paused → queued (explicit resume)
+Delivery: queued → sending → accepted | failed | skipped | uncertain
+                 ↖ retryable explicit failure / manual retry of failed only</div>
+      <p><code>accepted</code> means Gmail accepted the API request, not that the inbox received it. <code>uncertain</code> deliberately blocks automatic retry to prevent duplicate mail after an ambiguous network result. A pause stops new claims; a request already in flight may finish. Campaign counters are updated when a claimed row reaches a terminal status.</p>
+
+      <h3>12.6 Local operation and remaining release work</h3>
+      <div class="table-wrap"><table><thead><tr><th>Step</th><th>Purpose</th></tr></thead><tbody>
+        <tr><td><code>npm ci</code>, copy <code>.env.example</code> to <code>.env.local</code></td><td>Install pinned dependencies and configure Google client, NextAuth secret, 32-byte base64 encryption key, MongoDB URI, and app URL. Keep the encryption key stable or existing grants cannot be decrypted.</td></tr>
+        <tr><td>Google Cloud setup</td><td>Enable Gmail API and register both <code>/api/auth/callback/google</code> and <code>/api/gmail/callback</code> redirect URIs. Add authorized testers while OAuth consent is in test mode.</td></tr>
+        <tr><td><code>npm run dev</code> and <code>npm run worker</code></td><td>Run web and worker as separate processes. In production, supervise the worker so it restarts; provide both processes the same secret values and MongoDB database.</td></tr>
+        <tr><td><code>npm run typecheck</code>, <code>npm run lint</code>, <code>npm test</code>, <code>npm run build</code></td><td>Verify types, code quality, rendering, CSV parser, encryption, MIME construction, and Gmail error classification. A live end-to-end send requires real test credentials and a reachable MongoDB server.</td></tr>
+      </tbody></table></div>
+      <div class="callout warn"><p><strong>Before public launch:</strong> complete live Google/MongoDB smoke tests, OAuth verification and privacy materials, deployment backups and monitoring, and an account-data export/deletion workflow. The MVP has no reply detection or open tracking because it requests only <code>gmail.send</code>.</p></div>
+    </section>
+
+    <section id="sources">
+      <h2>13. Verified platform references</h2>
+      <p class="small">Checked 12 October 2026. These official references support the Google integration and sending constraints above; review them again during implementation because Google can change requirements.</p>
+      <ol class="sources small">
+        <li><a href="https://developers.google.com/workspace/gmail/api/auth/scopes">Gmail API scopes and verification categories</a> — <code>gmail.send</code> is a sensitive scope.</li>
+        <li><a href="https://developers.google.com/identity/protocols/oauth2/web-server">OAuth 2.0 for web server applications</a> — server-side code flow, offline access and refresh tokens.</li>
+        <li><a href="https://developers.google.com/identity/protocols/oauth2/resources/best-practices">Google OAuth security best practices</a> — state, token storage, revocation and incremental authorization.</li>
+        <li><a href="https://developers.google.com/workspace/gmail/api/guides/sending">Create and send Gmail messages</a> and <a href="https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/send">messages.send API</a> — MIME/base64url and send call.</li>
+        <li><a href="https://developers.google.com/workspace/gmail/api/guides/handle-errors">Gmail API error handling</a> — 429, per-user limits and backoff.</li>
+        <li><a href="https://support.google.com/mail/answer/22839?hl=en">Personal Gmail sending limits</a>, <a href="https://support.google.com/mail/answer/81126?hl=en">email sender guidelines</a>, and <a href="https://support.google.com/mail/answer/16734397?hl=en">Gmail program policies</a>.</li>
+      </ol>
+    </section>
+  </main>
+</div>
+</body>
+</html>
