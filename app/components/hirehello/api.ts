@@ -1,6 +1,7 @@
+import type { OutreachStatus } from '@/lib/core/contact-outreach';
 export type Template = { id: string; name: string; subject: string; bodyText: string; updatedAt?: string };
 export type Resume = { id: string; label: string; filename?: string; size?: number; createdAt?: string };
-export type Contact = { id: string; recruiterName: string; emailNormalized?: string; email?: string; companyName: string; status?: string };
+export type Contact = { id: string; recruiterName: string; emailNormalized?: string; email?: string; companyName: string; status?: string; outreachStatus: OutreachStatus; contactedAt?: string; campaignId?: string };
 export type Campaign = { id: string; name: string; status: string; senderAddress?: string; totals?: Record<string, number>; createdAt?: string };
 export type Delivery = { id: string; to: string; recruiterName?: string; companyName?: string; status: string; errorCode?: string; errorMessage?: string };
 export type Preview = { to: string; recruiterName?: string; companyName?: string; subject: string; bodyText?: string; body?: string };

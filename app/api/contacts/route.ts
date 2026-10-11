@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
+import { getContactOutreach } from '@/lib/core/contact-outreach';
 import { ApiError, isDuplicate, jsonBody, jsonError, requireSameOrigin, requireUserId, stringField } from '@/lib/core/http';
 import { normalizeEmail, noHeaderInjection } from '@/lib/core/validation';
 
 export async function GET() {
   try {
     const userId = await requireUserId();
-    const contacts = await (await getDb()).collection('contacts').find({ userId }).sort({ createdAt: -1 }).limit(1000).toArray();
-    return NextResponse.json({ contacts: contacts.map(({ _id, ...rest }) => ({ id: _id.toHexString(), ...rest })) });
+    const db = await getDb();
+    const contacts = await db.collection<{ emailNormalized: string; status?: string }>('contacts').find({ userId }).sort({ createdAt: -1 }).limit(1000).toArray();
+    const outreach = await getContactOutreach(db, userId, contacts);
+    return NextResponse.json({ contacts: contacts.map(({ _id, ...rest }) => ({ id: _id.toHexString(), ...rest, ...outreach.get(rest.emailNormalized) })) });
   } catch (error) { return jsonError(error); }
 }
 

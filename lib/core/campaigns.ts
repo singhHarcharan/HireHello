@@ -1,3 +1,4 @@
+import { RESERVED_DELIVERY_STATUSES } from './contact-outreach';
 import { ObjectId } from 'mongodb';
 import { getDb } from '@/lib/db';
 import { ApiError, objectId, stringField } from './http';
@@ -31,7 +32,7 @@ export async function prepareCampaign(user: { id: string; name: string }, input:
   if (contacts.length !== input.contactIds.length) throw new ApiError(400, 'CONTACT_NOT_FOUND', 'One or more contacts were not found');
   const suppressions = await db.collection('suppressions').find({ userId: user.id, emailNormalized: { $in: contacts.map(c => c.emailNormalized) } }).toArray();
   const suppressed = new Set(suppressions.map(s => s.emailNormalized));
-  const previous = await db.collection('deliveries').find({ userId: user.id, to: { $in: contacts.map(c => c.emailNormalized) }, status: { $in: ['queued', 'sending', 'accepted', 'uncertain'] } }).project({ to: 1 }).toArray();
+  const previous = await db.collection('deliveries').find({ userId: user.id, to: { $in: contacts.map(c => c.emailNormalized) }, status: { $in: RESERVED_DELIVERY_STATUSES } }).project({ to: 1 }).toArray();
   const sent = new Set(previous.map(d => d.to));
   const contactById = new Map(contacts.map(c => [c._id.toHexString(), c]));
   const previews: { contactId: string; to: string; subject: string; bodyText: string }[] = [];

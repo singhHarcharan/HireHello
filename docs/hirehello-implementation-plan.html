@@ -358,6 +358,28 @@ Delivery: queued → sending → accepted | failed | skipped | uncertain
       <p><strong>Browser checks:</strong> reviewed desktop and 390-pixel mobile layouts; exercised starter-template and clear-draft controls, contact search with no matches, recipient selection, and the server preview’s already-contacted exclusion. These checks do not send emails or create a campaign.</p>
     </section>
 
+    <section id="contact-lifecycle">
+      <div class="eyebrow">Implemented · 12 October 2026</div>
+      <h2>Automatic contact organization and confirmation dialogs</h2>
+      <p>The Contacts screen opens on <strong>Ready to contact</strong>. When an email is queued, its address leaves this list immediately. After Gmail accepts the send, the contact appears under <strong>Contacted</strong>, with the acceptance date and a link to the campaign. Users do not need to delete a person after sending.</p>
+      <div class="table-wrap"><table><thead><tr><th>View</th><th>Authoritative condition</th><th>Eligible for a new campaign?</th></tr></thead><tbody>
+        <tr><td>Ready to contact</td><td>No queued, sending, accepted, or uncertain delivery for this owner and normalized address; no suppression.</td><td>Yes. Known failures and skipped sends remain eligible unless blocked.</td></tr>
+        <tr><td>Scheduled</td><td>A queued or sending delivery exists, including a queued delivery in a paused campaign.</td><td>No; view the existing campaign to manage it.</td></tr>
+        <tr><td>Contacted</td><td>Gmail accepted the send request. This does not confirm inbox delivery or reading.</td><td>No.</td></tr>
+        <tr><td>Needs review</td><td>An uncertain delivery exists. Gmail may have sent the message even though its response was lost.</td><td>No; check Gmail Sent. The app does not automatically resend.</td></tr>
+        <tr><td>Blocked</td><td>The contact is suppressed or a suppression record exists for its address.</td><td>No. Suppression takes precedence over other states.</td></tr>
+      </tbody></table></div>
+      <h3>Why compute outreach state instead of deleting contacts?</h3>
+      <p><code>lib/core/contact-outreach.ts</code> derives the display state from existing deliveries and suppressions. <code>GET /api/contacts</code> performs two batched, owner-scoped lookups, rather than querying once per person. Delivery lookup uses the existing partial unique index on <code>userId + to</code>. Display eligibility, campaign preparation, and index creation share <code>RESERVED_DELIVERY_STATUSES</code>.</p>
+      <p>Delivery history is the source of truth. Updating a separate “contacted” flag in the worker would introduce another write that could fail after Gmail already accepted the email. Deriving the status avoids that inconsistency, works immediately for older sends without migration, and preserves protection if a contact is deleted and later reimported with a new ID. Protection applies per user and normalized email address; different email addresses for the same person are not automatically merged.</p>
+      <p>The browser polls contacts and campaigns every five seconds while work is scheduled, and refreshes outreach when the page regains focus or visibility. Contacts no longer eligible are removed from the draft selection and invalidate its preview. The server still rechecks eligibility during preview and campaign creation, and the database unique index remains the final guard against concurrent campaigns.</p>
+      <h3>Consistent, accessible confirmations</h3>
+      <p><code>ConfirmDialog</code> replaces browser popups for removing contacts, blocking sends, deleting templates and résumés, disconnecting Gmail, and the final campaign send. It uses a native HTML dialog with custom styling: a descriptive title, an affected-person or material summary, explicit action labels, and a quiet Cancel action. Cancel receives initial focus; Escape dismisses before submission, background interaction is blocked, and focus returns to the trigger. While a request runs, duplicate submission and dismissal are disabled. Errors remain in the dialog for retry.</p>
+      <p><strong>Removal semantics:</strong> removing a contact deletes its address-book entry, not campaign history, and does not cancel queued emails. “Block sends” is the action for preventing future delivery. Completed contacts can simply stay in Contacted.</p>
+      <h3>Verification</h3>
+      <p>Unit checks cover each outcome and suppression precedence. An opt-in MongoDB integration test creates a fresh temporary database, verifies status transitions, owner isolation, deletion/reimport behavior, and duplicate reservation rejection, then drops only that test database. Run <code>MONGODB_TEST_URI=mongodb://127.0.0.1:27017 npm test</code> locally. No Gmail send is made by these tests. Desktop and 390-pixel browser checks cover dialog layout, cancellation, focus restoration, and contact filters.</p>
+    </section>
+
     <section id="sources">
       <h2>13. Verified platform references</h2>
       <p class="small">Checked 12 October 2026. These official references support the Google integration and sending constraints above; review them again during implementation because Google can change requirements.</p>
