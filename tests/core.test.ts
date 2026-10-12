@@ -27,3 +27,9 @@ test('campaign input rejects repeated contacts and oversized recipient sets', ()
   assert.throws(() => parseCampaignInput({ ...base, contactIds: [contact, contact] }), /Select each contact once/);
   assert.throws(() => parseCampaignInput({ ...base, contactIds: Array.from({ length: 21 }, (_, i) => `507f1f77bcf86cd7994390${String(i).padStart(2, '0')}`) }), /Choose 1 to 20 contacts/);
 });
+
+test('CSV gives actionable errors for missing, duplicate, and empty headers', () => {
+  assert.throws(() => parseContactCsv('wrong,columns\na,b'), /CSV headers must include/);
+  assert.throws(() => parseContactCsv('email,recruiterName,companyName,email\na@b.com,A,B,a@b.com'), /without duplicates/);
+  assert.throws(() => parseContactCsv('email,recruiterName,companyName\n'), /no contact rows/);
+});

@@ -13,7 +13,7 @@ import { MAX_RESUME_UPLOAD_BYTES } from "@/lib/core/resume-upload-limit";
 
 type Tab = "overview" | "materials" | "contacts" | "compose" | "campaigns";
 type Connection = { connected: boolean; email?: string; status?: string };
-type Review = { senderAddress?: string; resume?: Resume; previews: Preview[]; skipped?: { contactId?: string; reason?: string }[] };
+type Review = { previewToken: string; senderAddress?: string; resume?: Resume; previews: Preview[]; skipped?: { contactId?: string; reason?: string }[] };
 type ImportResult = { valid: number; duplicate: number; invalid: number; suppressed: number; errors?: { row?: number; message?: string }[] };
 const tabs: { id: Tab; label: string; icon: IconName; description: string }[] = [
   { id: "overview", label: "Overview", icon: "home", description: "A little preparation. A more personal hello." },
@@ -74,6 +74,7 @@ export default function Dashboard() {
   const [selectedContacts, setSelectedContacts] = useState<string[]>([]);
   const [review, setReview] = useState<Review | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState("");
+  const testSendKey = useRef("");
   const csvInput = useRef<HTMLInputElement>(null);
   const resumeInput = useRef<HTMLInputElement>(null);
 
@@ -96,6 +97,7 @@ export default function Dashboard() {
         api<{ contacts: Contact[] }>("/api/contacts"),
         api<{ campaigns: Campaign[] }>("/api/campaigns")
       ]);
+      setReview(null); testSendKey.current = "";
       setConnection(g); setTemplates(t.templates || []); setResumes(r.resumes || []); setContacts(c.contacts || []); setCampaigns(campaignsResult.campaigns || []);
     } catch (error) { setFeedback({ error: true, message: error instanceof Error ? error.message : "Could not load your workspace." }); }
     finally { setLoading(false); }
@@ -169,37 +171,39 @@ export default function Dashboard() {
     }, contactForm.id ? "Contact updated." : "Contact added.");
   }
   async function importCsv(file: File) {
+    setImportResult(null);
+    if (file.size > 256_000 || !file.name.toLowerCase().endsWith(".csv")) {
+      setFeedback({error:true,message:"Choose a CSV file under 256 KB."});
+      if (csvInput.current) csvInput.current.value = "";
+      return;
+    }
     await run(async () => {
       const data = new FormData(); data.append("file", file);
       const result = await api<ImportResult>("/api/contacts/import", { method:"POST", body:data });
       setImportResult(result); await refresh();
-      if (csvInput.current) csvInput.current.value = "";
     }, "CSV import finished.");
+    if (csvInput.current) csvInput.current.value = "";
   }
   async function previewCampaign(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await run(async () => {
       const data = await api<Review>("/api/campaigns/preview", json("POST", { ...campaignForm, contactIds:selectedContacts }));
-      setReview(data); setIdempotencyKey(newIdempotencyKey());
+      setReview(data); setIdempotencyKey(newIdempotencyKey()); testSendKey.current = newIdempotencyKey();
     });
   }
   async function sendTest() {
     if (!review?.previews.length || !connection.connected) return;
-    const firstContact = contacts.find(c => c.id === (review.previews[0] as Preview & {contactId?: string}).contactId);
     await run(async () => {
       await api("/api/campaigns/test", json("POST", {
-        templateId: campaignForm.templateId,
-        resumeId: campaignForm.resumeId,
-        recruiterName: firstContact?.recruiterName || session?.user?.name || "Recruiter",
-        companyName: firstContact?.companyName || "Example Company"
-      }, { "Idempotency-Key": newIdempotencyKey() }));
+        ...campaignForm, contactIds: selectedContacts, previewToken: review.previewToken
+      }, { "Idempotency-Key": testSendKey.current }));
     }, `Test message accepted by Gmail for ${connection.email || "your own mailbox"}.`);
   }
   function createCampaign() {
     if (!review || !connection.connected) return;
     const count = review.previews.length;
     requestConfirmation({ title: "Ready to make your introductions?", description: "Each person gets a separate email with your selected résumé. Once queued, contacts leave your ready list automatically. Sending continues after you close this page.", label: `Send ${count} email${count === 1 ? "" : "s"}`, subject: `${count} individual introduction${count === 1 ? "" : "s"}`, detail: `From ${review.senderAddress || connection.email} · ${resumes.find(resume => resume.id === campaignForm.resumeId)?.label || "Selected résumé"}`, tone: "primary", icon: "send" }, async () => {
-      const data = await api<{ campaign: Campaign }>("/api/campaigns", json("POST", { ...campaignForm, contactIds:selectedContacts }, { "Idempotency-Key":idempotencyKey }));
+      const data = await api<{ campaign: Campaign }>("/api/campaigns", json("POST", { ...campaignForm, contactIds:selectedContacts, previewToken: review.previewToken }, { "Idempotency-Key":idempotencyKey }));
       setReview(null); setCampaignForm({ name:"",templateId:"",resumeId:"" }); setSelectedContacts([]);
       await refresh(); await refreshCampaign(data.campaign.id); setTab("campaigns");
     }, "Campaign saved. Check its sending status and individual results below.");
@@ -261,13 +265,13 @@ export default function Dashboard() {
       {tab === "materials" && <div className="grid-2">
         <section className="card"><div className="section-heading"><div><h2>Email templates</h2><p className="muted small">Your reusable message, personalized for each person.</p></div></div>
           {!templateForm.id && !templateForm.bodyText && <div className="starter-prompt"><span><Icon name="mail" size={18}/>Need a starting point?</span><button type="button" className="button-plain" onClick={useStarterTemplate}>Use starter template <Icon name="arrow" size={15}/></button></div>}
-          <form className="stack" onSubmit={saveTemplate}><div className="field"><label htmlFor="template-name">Template name</label><input id="template-name" required maxLength={100} value={templateForm.name} onChange={e => setTemplateForm({...templateForm,name:e.target.value})} placeholder="Software engineering introduction" /></div><div className="field"><label htmlFor="template-subject">Subject</label><input id="template-subject" required maxLength={200} value={templateForm.subject} onChange={e => setTemplateForm({...templateForm,subject:e.target.value})} placeholder="Exploring roles at {{companyName}}" /></div><div className="field"><label htmlFor="template-body">Email body</label><textarea id="template-body" required value={templateForm.bodyText} onChange={e => setTemplateForm({...templateForm,bodyText:e.target.value})} placeholder={"Hi {{recruiterName}},\n\nI’m interested in opportunities at {{companyName}}…\n\nThanks,\n{{senderName}}"}/></div><div className="merge-help"><span>Personalize with</span>{["recruiterName","companyName","senderName"].map(field=><button type="button" key={field} title={`Insert ${field} in email body`} onClick={()=>setTemplateForm(prev=>({...prev,bodyText:prev.bodyText + `{{${field}}}`}))}>{`{{${field}}}`}</button>)}</div><div className="row"><button className="button" disabled={busy}>{templateForm.id ? "Save changes" : "Save template"}</button>{(templateForm.id || templateForm.name || templateForm.subject || templateForm.bodyText) && <button type="button" className="button button-secondary" onClick={() => setTemplateForm({id:"",name:"",subject:"",bodyText:""})}>{templateForm.id ? "Cancel edit" : "Clear draft"}</button>}</div></form>
+          <form className="stack" onSubmit={saveTemplate}><div className="field"><label htmlFor="template-name">Template name</label><input id="template-name" required maxLength={80} value={templateForm.name} onChange={e => setTemplateForm({...templateForm,name:e.target.value})} placeholder="Software engineering introduction" /></div><div className="field"><label htmlFor="template-subject">Subject</label><input id="template-subject" required maxLength={180} value={templateForm.subject} onChange={e => setTemplateForm({...templateForm,subject:e.target.value})} placeholder="Exploring roles at {{companyName}}" /></div><div className="field"><label htmlFor="template-body">Email body</label><textarea id="template-body" required maxLength={12000} value={templateForm.bodyText} onChange={e => setTemplateForm({...templateForm,bodyText:e.target.value})} placeholder={"Hi {{recruiterName}},\n\nI’m interested in opportunities at {{companyName}}…\n\nThanks,\n{{senderName}}"}/></div><div className="merge-help"><span>Personalize with</span>{["recruiterName","companyName","senderName"].map(field=><button type="button" key={field} title={`Insert ${field} in email body`} onClick={()=>setTemplateForm(prev=>({...prev,bodyText:prev.bodyText + `{{${field}}}`}))}>{`{{${field}}}`}</button>)}</div><div className="row"><button className="button" disabled={busy}>{templateForm.id ? "Save changes" : "Save template"}</button>{(templateForm.id || templateForm.name || templateForm.subject || templateForm.bodyText) && <button type="button" className="button button-secondary" onClick={() => setTemplateForm({id:"",name:"",subject:"",bodyText:""})}>{templateForm.id ? "Cancel edit" : "Clear draft"}</button>}</div></form>
           <hr className="divider"/><div className="list">{templates.length ? templates.map(t => <div className="list-item" key={t.id}><div><strong>{t.name}</strong><p>{t.subject}</p></div><div className="row"><button type="button" className="button-plain" onClick={() => setTemplateForm({id:t.id,name:t.name,subject:t.subject,bodyText:t.bodyText})}>Edit</button><button type="button" className="button-plain" disabled={busy} onClick={() => requestConfirmation({ title: "Delete this template?", description: "This removes the template from your materials. Existing campaigns keep their saved email content. This action cannot be undone.", label: "Delete template", subject: t.name, icon: "layers" }, async () => { await api(`/api/templates/${encodeURIComponent(t.id)}`, {method:"DELETE"}); if (templateForm.id === t.id) setTemplateForm({id:"",name:"",subject:"",bodyText:""}); await refresh(); }, "Template deleted.")}>Delete</button></div></div>) : <div className="empty">Your saved templates will live here. Start with a draft above.</div>}</div>
         </section>
         <section className="card"><div className="section-heading"><div><h2>Résumés</h2><p className="muted small">PDF only, up to 4 MB.</p></div></div><form className="stack" onSubmit={uploadResume}><div className="field"><label htmlFor="resume-label">Résumé name</label><input id="resume-label" required maxLength={100} value={resumeLabel} onChange={e => setResumeLabel(e.target.value)} placeholder="Backend engineer · 2026" /></div><div className="field"><label htmlFor="resume-file">PDF file</label><input ref={resumeInput} className="file-input" id="resume-file" type="file" accept="application/pdf,.pdf" required onChange={e => { const file = e.target.files?.[0] || null; if (file && (file.size > MAX_RESUME_UPLOAD_BYTES || !file.name.toLowerCase().endsWith(".pdf"))) { setFeedback({error:true,message:"Choose a PDF résumé up to 4 MB."}); e.target.value = ""; setResumeFile(null); return; } setResumeFile(file); if (file && !resumeLabel) setResumeLabel(file.name.replace(/\.pdf$/i,"")); }}/></div><button className="button" disabled={busy || !resumeFile}>Upload résumé</button></form><hr className="divider"/><div className="list">{resumes.length ? resumes.map(r => <div className="list-item" key={r.id}><div><strong>{r.label}</strong><p>{r.filename || "PDF"}{r.size ? ` · ${(r.size/1024/1024).toFixed(1)} MB` : ""}</p></div><button type="button" className="button-plain" disabled={busy} onClick={() => requestConfirmation({ title: "Delete this résumé?", description: "This removes the PDF from your materials. Existing campaigns keep their saved attachment. This action cannot be undone.", label: "Delete résumé", subject: r.label, icon: "file" }, async () => { await api(`/api/resumes/${encodeURIComponent(r.id)}`, {method:"DELETE"}); await refresh(); }, "Résumé deleted.")}>Delete</button></div>) : <div className="empty">Upload a PDF once, then reuse it in any campaign.</div>}</div></section>
       </div>}
 
-      {tab === "contacts" && <div className="stack"><div className="outreach-banner"><span className="stat-icon"><Icon name="check"/></span><div><strong>Your contact list takes care of itself.</strong><p>After Gmail accepts a send, the person moves to Contacted. Their history stays saved, and they won’t appear in your next campaign.</p></div><span className="tag good">Automatic</span></div><div className="grid-2"><section className="card"><h2>{contactForm.id ? "Edit contact" : "Add a contact"}</h2><form className="stack" onSubmit={addContact}><div className="field"><label htmlFor="contact-name">Recruiter name</label><input id="contact-name" required value={contactForm.recruiterName} onChange={e => setContactForm({...contactForm,recruiterName:e.target.value})}/></div><div className="field"><label htmlFor="contact-email">Email address</label><input id="contact-email" type="email" required value={contactForm.email} onChange={e => setContactForm({...contactForm,email:e.target.value})}/></div><div className="field"><label htmlFor="contact-company">Company</label><input id="contact-company" required value={contactForm.companyName} onChange={e => setContactForm({...contactForm,companyName:e.target.value})}/></div><div className="row"><button className="button" disabled={busy}>{contactForm.id ? "Save contact" : "Add contact"}</button>{contactForm.id && <button className="button button-secondary" type="button" onClick={()=>setContactForm({id:"",recruiterName:"",email:"",companyName:""})}>Cancel edit</button>}</div></form></section><section className="card"><h2>Import a CSV</h2><p className="muted">Use columns <code>email,recruiterName,companyName</code>. Invalid, duplicate, and suppressed rows are skipped.</p><a className="button-plain csv-example" href="/contact-import-example.csv" download><Icon name="file" size={16}/>Download example CSV</a><div className="field"><label htmlFor="contacts-csv">Choose CSV file</label><input ref={csvInput} className="file-input" id="contacts-csv" type="file" accept=".csv,text/csv" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void importCsv(file); }}/></div>{importResult && <div className="alert" role="status">{importResult.valid} added · {importResult.duplicate} duplicates · {importResult.invalid} invalid · {importResult.suppressed} suppressed{importResult.errors?.length ? <ul>{importResult.errors.slice(0,5).map((item,index)=><li key={index}>Row {item.row}: {item.message}</li>)}</ul> : null}</div>}</section></div>
+      {tab === "contacts" && <div className="stack"><div className="outreach-banner"><span className="stat-icon"><Icon name="check"/></span><div><strong>Your contact list takes care of itself.</strong><p>After Gmail accepts a send, the person moves to Contacted. Their history stays saved, and they won’t appear in your next campaign.</p></div><span className="tag good">Automatic</span></div><div className="grid-2"><section className="card"><h2>{contactForm.id ? "Edit contact" : "Add a contact"}</h2><form className="stack" onSubmit={addContact}><div className="field"><label htmlFor="contact-name">Recruiter name</label><input id="contact-name" required maxLength={120} value={contactForm.recruiterName} onChange={e => setContactForm({...contactForm,recruiterName:e.target.value})}/></div><div className="field"><label htmlFor="contact-email">Email address</label><input id="contact-email" type="email" required maxLength={254} value={contactForm.email} onChange={e => setContactForm({...contactForm,email:e.target.value})}/></div><div className="field"><label htmlFor="contact-company">Company</label><input id="contact-company" required maxLength={120} value={contactForm.companyName} onChange={e => setContactForm({...contactForm,companyName:e.target.value})}/></div><div className="row"><button className="button" disabled={busy}>{contactForm.id ? "Save contact" : "Add contact"}</button>{contactForm.id && <button className="button button-secondary" type="button" onClick={()=>setContactForm({id:"",recruiterName:"",email:"",companyName:""})}>Cancel edit</button>}</div></form></section><section className="card"><h2>Import a CSV</h2><p className="muted">Use columns <code>email,recruiterName,companyName</code>. Invalid, duplicate, and suppressed rows are skipped.</p><a className="button-plain csv-example" href="/contact-import-example.csv" download><Icon name="file" size={16}/>Download example CSV</a><div className="field"><label htmlFor="contacts-csv">Choose CSV file</label><input ref={csvInput} className="file-input" id="contacts-csv" type="file" accept=".csv,text/csv" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void importCsv(file); }}/></div>{importResult && <div className="alert" role="status">{importResult.valid} added · {importResult.duplicate} duplicates · {importResult.invalid} invalid · {importResult.suppressed} suppressed{importResult.errors?.length ? <ul>{importResult.errors.slice(0,5).map((item,index)=><li key={index}>Row {item.row}: {item.message}</li>)}</ul> : null}</div>}</section></div>
         <ContactList contacts={contacts} busy={busy}
           onEdit={contact => { setContactForm({id:contact.id,recruiterName:contact.recruiterName,email:contact.email || contact.emailNormalized || "",companyName:contact.companyName}); document.getElementById("contact-name")?.focus(); }}
           onHistory={id => { setTab("campaigns"); void refreshCampaign(id); }}

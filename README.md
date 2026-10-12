@@ -112,3 +112,7 @@ MONGODB_TEST_URI=mongodb://127.0.0.1:27017 npm test
 ```
 
 Tests create and drop randomly named `hirehello_test_*` databases and stub Gmail. They cover concurrent callbacks, durable pacing, redelivery, daily limits, lost locks, crash recovery, retry backoff, unknown send outcomes, failed publication and interrupted dispatch-status writes. Never point this opt-in test URI at a production account.
+
+### User journey regression tests
+
+Run `npm run test:http` with local MongoDB running and the local Next.js dev server stopped. This launches port 3101, uses two isolated test identities and a disposable database, and cleans up afterward. No real Gmail message is sent. Campaign and self-test APIs now require the `previewToken` returned by `/api/campaigns/preview` so changed materials or recipients must be reviewed again.

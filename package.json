@@ -9,7 +9,8 @@
     "lint": "eslint app lib worker tests",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts worker/*.test.ts",
-    "worker": "tsx worker/index.ts"
+    "worker": "tsx worker/index.ts",
+    "test:http": "tsx tests/http.integration.ts"
   },
   "dependencies": {
     "@next/env": "^16.4.0",

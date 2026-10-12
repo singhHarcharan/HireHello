@@ -1,3 +1,4 @@
+import { createPreviewToken, requireCurrentPreview } from '@/lib/core/preview-token';
 import { dispatchCampaign } from '@/lib/queue/dispatch';
 import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
@@ -25,12 +26,14 @@ export async function POST(request: NextRequest) {
     const user = await requireUserContext();
     const key = request.headers.get('Idempotency-Key')?.trim();
     if (!key || !/^[A-Za-z0-9_-]{8,128}$/.test(key)) throw new ApiError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'Send a unique Idempotency-Key header');
-    const input = parseCampaignInput(await jsonBody(request));
-    const requestHash = createHash('sha256').update(JSON.stringify({ name: input.name, templateId: input.templateId.toHexString(), resumeId: input.resumeId.toHexString(), contactIds: input.contactIds.map(id => id.toHexString()) })).digest('hex');
+    const body = await jsonBody(request);
+    const input = parseCampaignInput(body);
+    const requestHash = createHash('sha256').update(JSON.stringify({ previewToken: body.previewToken, name: input.name, templateId: input.templateId.toHexString(), resumeId: input.resumeId.toHexString(), contactIds: input.contactIds.map(id => id.toHexString()) })).digest('hex');
     const db = await getDb();
     const existing = await db.collection('campaigns').findOne({ userId: user.id, idempotencyKey: key });
-    if (existing) return campaignResult(existing, requestHash);
+    if (existing) return await campaignResult(existing, requestHash);
     const prepared = await prepareCampaign(user, input);
+    requireCurrentPreview(body.previewToken, createPreviewToken(user.id, input, prepared));
     if (!prepared.previews.length) throw new ApiError(400, 'NO_ELIGIBLE_CONTACTS', 'No eligible contacts remain');
     const recent = await db.collection('campaigns').countDocuments({ userId: user.id, createdAt: { $gte: new Date(Date.now() - 3600_000) } });
     if (recent >= 5) throw new ApiError(429, 'RATE_LIMITED', 'Campaign creation limit reached for this hour');
@@ -56,7 +59,7 @@ export async function POST(request: NextRequest) {
     catch (error) {
       if (isDuplicate(error)) {
         const winner = await db.collection('campaigns').findOne({ userId: user.id, idempotencyKey: key });
-        if (winner) return campaignResult(winner, requestHash);
+        if (winner) return await campaignResult(winner, requestHash);
       }
       throw error;
     }
