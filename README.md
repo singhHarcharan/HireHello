@@ -40,6 +40,35 @@ npm run worker
 
 Open [http://localhost:3000](http://localhost:3000). Sign in with Google, connect the same Gmail account for sending, save a template and PDF, add contacts, review a campaign, then confirm. The worker must stay running to process queued messages after the browser closes. Deploy it as a persistent process with automatic restart; a serverless web deployment alone does not run this queue.
 
+## Deploy with Vercel
+
+Vercel runs the web app and API. The email sender in `worker/index.ts` needs a separate, continuously running Node.js service. Both processes must use the **same hosted MongoDB database**, Google OAuth client, and Gmail token encryption key. The local `mongodb://127.0.0.1:27017` URI will not work from Vercel.
+
+1. Create a hosted MongoDB database (for example, Atlas), a database user, and network access for Vercel and the worker. Set `MONGODB_URI` to its connection string. Use the same `MONGODB_DB` on both processes. If moving existing accounts, migrate the collections **and** the `resumeFiles` GridFS collections.
+2. In the existing Vercel project, set the following **Production** environment variables. Redeploy after changing them. Use the permanent production domain rather than a preview deployment URL.
+
+   | Variable | Value |
+   | --- | --- |
+   | `NEXTAUTH_URL` | `https://your-production-domain` |
+   | `NEXTAUTH_SECRET` | A stable random secret; generate once with `openssl rand -base64 32` |
+   | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Your Google Cloud web OAuth client |
+   | `GMAIL_TOKEN_ENCRYPTION_KEY` | A stable base64-encoded 32-byte key; generate separately with `openssl rand -base64 32` |
+   | `MONGODB_URI`, `MONGODB_DB` | The hosted MongoDB connection settings |
+
+   Preserve the session secret and Gmail encryption key across redeployments. Changing the encryption key without migrating saved tokens requires users to reconnect Gmail. Never use `NEXT_PUBLIC_` for these values or commit `.env.local`.
+3. In Google Cloud, add your permanent domain to **Authorized JavaScript origins** and register **both** exact redirect URIs on the web client:
+
+   ```text
+   https://your-production-domain/api/auth/callback/google
+   https://your-production-domain/api/gmail/callback
+   ```
+
+   Keep localhost entries for development. If OAuth remains in Testing, add every intended test account under Audience. Public use of Gmail send access may require Google verification.
+4. Deploy **one** persistent Node.js worker from this repository, for example a Render Background Worker. Install with `npm ci --omit=dev` and start with `npm run worker`. Give it `MONGODB_URI`, `MONGODB_DB`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GMAIL_TOKEN_ENCRYPTION_KEY` with the **same values** as Vercel. `WORKER_POLL_MS`, `WORKER_SEND_INTERVAL_MS`, and `WORKER_DAILY_CAP` are optional. Arrange automatic restart and inspect its logs if a campaign stays queued.
+5. On the production domain, sign in, connect Gmail, upload a PDF no larger than 4 MiB, and send a **test message to your own mailbox**. Create a small live campaign only when you intend to contact its recipients. Check the delivery results after the worker runs.
+
+Vercel Functions cap request bodies at 4.5 MB. New résumé uploads are limited to 4 MiB to leave room for multipart form overhead. Already stored PDFs up to the old 10 MB limit can still be used in campaigns. Vercel Hobby cron runs only once per day, which does not support the app's prompt sending and 15-second pacing.
+
 ## Commands
 
 | Command | Purpose |

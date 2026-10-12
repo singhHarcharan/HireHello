@@ -5,6 +5,7 @@ import { Readable } from 'stream';
 import { finished } from 'stream/promises';
 import { getDb, getResumeBucket } from '@/lib/db';
 import { ApiError, jsonError, requireSameOrigin, requireUserId, stringField } from '@/lib/core/http';
+import { MAX_RESUME_UPLOAD_BYTES } from '@/lib/core/resume-upload-limit';
 
 export async function GET() {
   try {
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
     const userId = await requireUserId();
     const form = await request.formData();
     const file = form.get('file');
-    if (!(file instanceof File) || file.size === 0 || file.size > 10 * 1024 * 1024 || file.type !== 'application/pdf') throw new ApiError(400, 'INVALID_PDF', 'Choose a PDF under 10 MB');
+    if (!(file instanceof File) || file.size === 0 || file.size > MAX_RESUME_UPLOAD_BYTES || file.type !== 'application/pdf') throw new ApiError(400, 'INVALID_PDF', 'Choose a PDF up to 4 MB');
     const label = stringField(form.get('label'), 'label', 100);
     const buffer = Buffer.from(await file.arrayBuffer());
     if (buffer.subarray(0, 5).toString() !== '%PDF-') throw new ApiError(400, 'INVALID_PDF', 'File is not a PDF');
