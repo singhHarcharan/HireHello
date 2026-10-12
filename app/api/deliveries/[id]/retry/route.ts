@@ -1,3 +1,4 @@
+import { dispatchCampaign } from '@/lib/queue/dispatch';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { ApiError, isDuplicate, jsonError, objectId, requireSameOrigin, requireUserId } from '@/lib/core/http';
@@ -24,6 +25,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     }
     if (!result) throw new ApiError(409, 'NOT_RETRYABLE', 'Delivery changed');
     await db.collection('campaigns').updateOne({ _id: delivery.campaignId, userId }, { $inc: { 'totals.failed': -1, 'totals.queued': 1 }, $set: { status: 'queued', updatedAt: new Date() } });
-    return NextResponse.json({ queued: true });
+    const queueDispatchStatus = await dispatchCampaign(delivery.campaignId, userId, db);
+    return NextResponse.json({ queued: true, queueDispatchStatus });
   } catch (error) { return jsonError(error); }
 }

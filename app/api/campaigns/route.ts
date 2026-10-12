@@ -1,3 +1,4 @@
+import { dispatchCampaign } from '@/lib/queue/dispatch';
 import { NextRequest, NextResponse } from 'next/server';
 import { ObjectId } from 'mongodb';
 import { createHash } from 'crypto';
@@ -16,6 +17,7 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  let committed = false;
   let campaignId: ObjectId | undefined;
   let snapshotId: ObjectId | undefined;
   try {
@@ -43,6 +45,8 @@ export async function POST(request: NextRequest) {
       templateSnapshot: { name: prepared.template.name, subject: prepared.template.subject, bodyText: prepared.template.bodyText, version: prepared.template.version },
       resumeSnapshotFileId: null as ObjectId | null,
       resumeLabel: prepared.resume.label,
+      previewSkipped: prepared.skipped.length,
+      queueDispatchStatus: 'pending',
       totals: { queued: prepared.previews.length, accepted: 0, failed: 0, skipped: prepared.skipped.length, uncertain: 0 },
       createdAt: now,
       updatedAt: now,
@@ -74,15 +78,23 @@ export async function POST(request: NextRequest) {
     }));
     await db.collection('deliveries').insertMany(deliveryDocs);
     await db.collection('campaigns').updateOne({ _id: campaignId, userId: user.id, status: 'preparing' }, { $set: { resumeSnapshotFileId: snapshotId, status: 'queued', updatedAt: new Date() } });
+    committed = true;
+    await dispatchCampaign(campaignId, user.id, db);
     const saved = await db.collection('campaigns').findOne({ _id: campaignId, userId: user.id });
     return NextResponse.json({ campaign: publicCampaign(saved!), deliveries: (await db.collection('deliveries').find({ campaignId, userId: user.id }).toArray()).map(publicDelivery) }, { status: 201 });
   } catch (error) {
-    if (campaignId) {
-      const db = await getDb();
-      await db.collection('deliveries').deleteMany({ campaignId, status: 'queued' }).catch(() => undefined);
-      await db.collection('campaigns').deleteOne({ _id: campaignId, status: 'preparing' }).catch(() => undefined);
+    if (campaignId && !committed) {
+      // A queued-state update may have committed even if its acknowledgement was
+      // lost. Cleanup only after atomically deleting an actually preparing row.
+      try {
+        const db = await getDb();
+        const removed = await db.collection('campaigns').deleteOne({ _id: campaignId, status: 'preparing' });
+        if (removed.deletedCount) {
+          await db.collection('deliveries').deleteMany({ campaignId, status: 'queued' });
+          if (snapshotId) await (await getResumeBucket()).delete(snapshotId);
+        }
+      } catch { /* Preserve uncertain state for recovery rather than deleting approved work. */ }
     }
-    if (snapshotId) await (await getResumeBucket()).delete(snapshotId).catch(() => undefined);
     return jsonError(isDuplicate(error) ? new ApiError(409, 'RECIPIENT_ALREADY_SCHEDULED', 'A recipient is already queued or has been contacted') : error);
   }
 }
@@ -90,6 +102,7 @@ export async function POST(request: NextRequest) {
 async function campaignResult(campaign: Record<string, unknown>, requestHash: string) {
   if (campaign.requestHash !== requestHash) throw new ApiError(409, 'IDEMPOTENCY_CONFLICT', 'This key was used with different campaign details');
   if (campaign.status === 'preparing') throw new ApiError(409, 'CAMPAIGN_PREPARING', 'Campaign is still being prepared; retry shortly');
+  if (campaign.status === 'queued') await dispatchCampaign(campaign._id as ObjectId, campaign.userId as string);
   const deliveries = await (await getDb()).collection('deliveries').find({ campaignId: campaign._id }).toArray();
   return NextResponse.json({ campaign: publicCampaign(campaign), deliveries: deliveries.map(publicDelivery) });
 }

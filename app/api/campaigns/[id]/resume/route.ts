@@ -1,3 +1,4 @@
+import { dispatchCampaign } from '@/lib/queue/dispatch';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { ApiError, jsonError, objectId, requireSameOrigin, requireUserId } from '@/lib/core/http';
@@ -15,6 +16,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (!grant || grant.gmailAddress?.toLowerCase() !== campaign.senderAddress?.toLowerCase()) throw new ApiError(409, 'GMAIL_NOT_CONNECTED', 'Reconnect the original Gmail account');
     if (!await db.collection('deliveries').countDocuments({ userId, campaignId: _id, status: 'queued' })) throw new ApiError(409, 'NOT_RESUMABLE', 'No queued messages remain');
     await db.collection('campaigns').updateOne({ _id, userId, status: 'paused' }, { $set: { status: 'queued', pauseReason: null, updatedAt: new Date() } });
-    return NextResponse.json({ resumed: true });
+    const queueDispatchStatus = await dispatchCampaign(_id, userId, db);
+    return NextResponse.json({ resumed: true, queueDispatchStatus });
   } catch (error) { return jsonError(error); }
 }

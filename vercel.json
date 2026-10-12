@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["iad1"],
+  "functions": {
+    "app/api/queues/send/route.ts": {
+      "experimentalTriggers": [{ "type": "queue/v2beta", "topic": "hirehello-send" }]
+    }
+  }
+}

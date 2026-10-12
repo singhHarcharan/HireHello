@@ -7,7 +7,7 @@ let indexesPromise: Promise<void> | undefined;
 export async function getMongoClient(): Promise<MongoClient> {
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI is required');
-  clientPromise ??= new MongoClient(uri).connect().catch(error => {
+  clientPromise ??= new MongoClient(uri, { serverSelectionTimeoutMS: 10_000, socketTimeoutMS: 30_000, maxPoolSize: 10 }).connect().catch(error => {
     clientPromise = undefined;
     throw error;
   });
@@ -30,6 +30,7 @@ export async function getResumeBucket(): Promise<GridFSBucket> {
 
 async function ensureIndexes(db: Db): Promise<void> {
   await Promise.all([
+    db.collection('sender_locks').createIndex({ userId: 1 }, { unique: true }),
     db.collection('users').createIndex({ googleSub: 1 }, { unique: true }),
     db.collection('google_grants').createIndex({ userId: 1 }, { unique: true }),
     db.collection('gmail_oauth_attempts').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
