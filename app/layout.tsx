@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "HireHello",
+  verification: { google: "xu5knF5-svGpBakdi_YVNUjhWsp2n5-TUTx9PYjNyAM" },
   description: "Personalized recruiter outreach from your own Gmail account",
 };
 
