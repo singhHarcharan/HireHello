@@ -155,9 +155,9 @@ export default function Dashboard() {
     return () => { cancelled = true; window.clearInterval(interval); window.removeEventListener("focus", syncOutreach); document.removeEventListener("visibilitychange", syncOutreach); };
   }, [status, hasPendingOutreach, selectedCampaign?.id, notify, connection.connected]);
   useEffect(() => {
-    const eligible = selectedContacts.filter(id => contacts.some(contact => contact.id === id && contact.outreachStatus === "ready"));
+    const eligible = selectedContacts.filter(id => contacts.some(contact => contact.id === id && contact.outreachStatus === (campaignForm.sendMode === "resend" ? "contacted" : "ready")));
     if (eligible.length !== selectedContacts.length) { setSelectedContacts(eligible); setReview(null); }
-  }, [contacts, selectedContacts]);
+  }, [contacts, selectedContacts, campaignForm.sendMode]);
 
   function requestConfirmation(options: Omit<Confirmation, "action">, task: () => Promise<void>, success: string) {
     setConfirmation({ ...options, action: async () => {
