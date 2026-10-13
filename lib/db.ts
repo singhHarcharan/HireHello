@@ -1,4 +1,4 @@
-import { RESERVED_DELIVERY_STATUSES } from './core/contact-outreach';
+import { ensureDeliveryIndexes } from './core/delivery-indexes';
 import { Db, GridFSBucket, MongoClient } from 'mongodb';
 
 let clientPromise: Promise<MongoClient> | undefined;
@@ -41,7 +41,7 @@ async function ensureIndexes(db: Db): Promise<void> {
     db.collection('campaigns').createIndex({ userId: 1, idempotencyKey: 1 }, { unique: true }),
     db.collection('campaigns').createIndex({ userId: 1, createdAt: -1 }),
     db.collection('deliveries').createIndex({ campaignId: 1, contactId: 1 }, { unique: true }),
-    db.collection('deliveries').createIndex({ userId: 1, to: 1 }, { unique: true, partialFilterExpression: { status: { $in: RESERVED_DELIVERY_STATUSES } } }),
+    ensureDeliveryIndexes(db),
     db.collection('deliveries').createIndex({ status: 1, leaseUntil: 1 }),
     db.collection('deliveries').createIndex({ userId: 1, campaignId: 1 }),
     db.collection('test_sends').createIndex({ userId: 1, idempotencyKey: 1 }, { unique: true }),

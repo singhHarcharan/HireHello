@@ -1,11 +1,11 @@
-import { RESERVED_DELIVERY_STATUSES } from './contact-outreach';
+import { RESERVED_DELIVERY_STATUSES, IN_FLIGHT_DELIVERY_STATUSES } from './contact-outreach';
 import { formatEmailBody } from './email-body';
 import { ObjectId } from 'mongodb';
 import { getDb } from '@/lib/db';
 import { ApiError, objectId, stringField } from './http';
 import { MAX_CAMPAIGN_CONTACTS, renderTemplate } from './validation';
 
-export type CampaignInput = { name: string; templateId: ObjectId; resumeId: ObjectId; contactIds: ObjectId[] };
+export type CampaignInput = { name: string; templateId: ObjectId; resumeId: ObjectId; contactIds: ObjectId[]; sendMode: 'first_contact' | 'resend' };
 
 export function parseCampaignInput(body: Record<string, unknown>): CampaignInput {
   const name = stringField(body.name, 'name', 100);
@@ -16,7 +16,9 @@ export function parseCampaignInput(body: Record<string, unknown>): CampaignInput
   }
   const contactIds = body.contactIds.map(value => objectId(String(value)));
   if (new Set(contactIds.map(id => id.toHexString())).size !== contactIds.length) throw new ApiError(400, 'DUPLICATE_CONTACT', 'Select each contact once');
-  return { name, templateId, resumeId, contactIds };
+  const sendMode = body.sendMode ?? 'first_contact';
+  if (sendMode !== 'first_contact' && sendMode !== 'resend') throw new ApiError(400, 'VALIDATION_ERROR', 'Choose first contact or resend');
+  return { name, templateId, resumeId, contactIds, sendMode };
 }
 
 export async function prepareCampaign(user: { id: string; name: string }, input: CampaignInput) {
@@ -33,20 +35,25 @@ export async function prepareCampaign(user: { id: string; name: string }, input:
   if (contacts.length !== input.contactIds.length) throw new ApiError(400, 'CONTACT_NOT_FOUND', 'One or more contacts were not found');
   const suppressions = await db.collection('suppressions').find({ userId: user.id, emailNormalized: { $in: contacts.map(c => c.emailNormalized) } }).toArray();
   const suppressed = new Set(suppressions.map(s => s.emailNormalized));
-  const previous = await db.collection('deliveries').find({ userId: user.id, to: { $in: contacts.map(c => c.emailNormalized) }, status: { $in: RESERVED_DELIVERY_STATUSES } }).project({ to: 1 }).toArray();
-  const sent = new Set(previous.map(d => d.to));
+  const previous = await db.collection('deliveries').find({ userId: user.id, to: { $in: contacts.map(c => c.emailNormalized) }, status: { $in: RESERVED_DELIVERY_STATUSES } }).sort({ _id: -1 }).project({ to: 1, status: 1, sentAt: 1 }).toArray();
+  const pending = new Set(previous.filter(d => IN_FLIGHT_DELIVERY_STATUSES.includes(d.status)).map(d => d.to));
+  const accepted = new Map<string, typeof previous[number]>();
+  for (const delivery of previous) if (delivery.status === 'accepted' && !accepted.has(delivery.to)) accepted.set(delivery.to, delivery);
   const contactById = new Map(contacts.map(c => [c._id.toHexString(), c]));
-  const previews: { contactId: string; to: string; subject: string; bodyText: string; bodyHtml: string }[] = [];
+  const previews: { contactId: string; to: string; subject: string; bodyText: string; bodyHtml: string; previousDeliveryId: string | null; lastContactedAt?: Date }[] = [];
   const skipped: { contactId: string; reason: string }[] = [];
   for (const contactId of input.contactIds) {
     const contact = contactById.get(contactId.toHexString())!;
     let reason = '';
     if (contact.status !== 'active' || suppressed.has(contact.emailNormalized)) reason = 'suppressed';
-    else if (sent.has(contact.emailNormalized)) reason = 'already_scheduled_or_sent';
+    else if (pending.has(contact.emailNormalized)) reason = 'scheduled_or_needs_review';
+    else if (input.sendMode === 'resend' && !accepted.has(contact.emailNormalized)) reason = 'not_previously_contacted';
+    else if (input.sendMode !== 'resend' && accepted.has(contact.emailNormalized)) reason = 'already_contacted_choose_resend';
     if (reason) { skipped.push({ contactId: contactId.toHexString(), reason }); continue; }
     const fields = { recruiterName: contact.recruiterName, companyName: contact.companyName, senderName: user.name };
     const bodyText = renderTemplate(template.bodyText, fields);
-    previews.push({ contactId: contactId.toHexString(), to: contact.emailNormalized, subject: renderTemplate(template.subject, fields), bodyText, bodyHtml: formatEmailBody(bodyText) });
+    const last = accepted.get(contact.emailNormalized);
+    previews.push({ contactId: contactId.toHexString(), to: contact.emailNormalized, subject: renderTemplate(template.subject, fields), bodyText, bodyHtml: formatEmailBody(bodyText), previousDeliveryId: last?._id.toHexString() ?? null, ...(last?.sentAt ? { lastContactedAt: last.sentAt as Date } : {}) });
   }
   return { senderAddress: grant.gmailAddress as string, template, resume, previews, skipped };
 }

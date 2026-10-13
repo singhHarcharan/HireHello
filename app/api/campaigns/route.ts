@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     if (!key || !/^[A-Za-z0-9_-]{8,128}$/.test(key)) throw new ApiError(400, 'IDEMPOTENCY_KEY_REQUIRED', 'Send a unique Idempotency-Key header');
     const body = await jsonBody(request);
     const input = parseCampaignInput(body);
-    const requestHash = createHash('sha256').update(JSON.stringify({ previewToken: body.previewToken, name: input.name, templateId: input.templateId.toHexString(), resumeId: input.resumeId.toHexString(), contactIds: input.contactIds.map(id => id.toHexString()) })).digest('hex');
+    const requestHash = createHash('sha256').update(JSON.stringify({ previewToken: body.previewToken, name: input.name, templateId: input.templateId.toHexString(), resumeId: input.resumeId.toHexString(), contactIds: input.contactIds.map(id => id.toHexString()), ...(input.sendMode === 'resend' ? { sendMode: input.sendMode } : {}) })).digest('hex');
     const db = await getDb();
     const existing = await db.collection('campaigns').findOne({ userId: user.id, idempotencyKey: key });
     if (existing) return await campaignResult(existing, requestHash);
@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
     const campaign = {
       userId: user.id,
       name: input.name,
+      sendMode: input.sendMode,
       idempotencyKey: key,
       requestHash,
       status: 'preparing',
@@ -76,6 +77,7 @@ export async function POST(request: NextRequest) {
     const deliveryDocs = prepared.previews.map(item => ({
       userId: user.id, campaignId, contactId: new ObjectId(item.contactId), to: item.to,
       renderedSubject: item.subject, renderedBody: item.bodyText, renderedHtml: item.bodyHtml,
+      previousDeliveryId: item.previousDeliveryId ? new ObjectId(item.previousDeliveryId) : null,
       status: 'queued', attemptCount: 0, leaseUntil: null, gmailMessageId: null,
       errorCode: null, createdAt: now, updatedAt: now,
     }));
