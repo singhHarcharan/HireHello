@@ -1,4 +1,5 @@
 import { RESERVED_DELIVERY_STATUSES } from './contact-outreach';
+import { formatEmailBody } from './email-body';
 import { ObjectId } from 'mongodb';
 import { getDb } from '@/lib/db';
 import { ApiError, objectId, stringField } from './http';
@@ -35,7 +36,7 @@ export async function prepareCampaign(user: { id: string; name: string }, input:
   const previous = await db.collection('deliveries').find({ userId: user.id, to: { $in: contacts.map(c => c.emailNormalized) }, status: { $in: RESERVED_DELIVERY_STATUSES } }).project({ to: 1 }).toArray();
   const sent = new Set(previous.map(d => d.to));
   const contactById = new Map(contacts.map(c => [c._id.toHexString(), c]));
-  const previews: { contactId: string; to: string; subject: string; bodyText: string }[] = [];
+  const previews: { contactId: string; to: string; subject: string; bodyText: string; bodyHtml: string }[] = [];
   const skipped: { contactId: string; reason: string }[] = [];
   for (const contactId of input.contactIds) {
     const contact = contactById.get(contactId.toHexString())!;
@@ -44,7 +45,8 @@ export async function prepareCampaign(user: { id: string; name: string }, input:
     else if (sent.has(contact.emailNormalized)) reason = 'already_scheduled_or_sent';
     if (reason) { skipped.push({ contactId: contactId.toHexString(), reason }); continue; }
     const fields = { recruiterName: contact.recruiterName, companyName: contact.companyName, senderName: user.name };
-    previews.push({ contactId: contactId.toHexString(), to: contact.emailNormalized, subject: renderTemplate(template.subject, fields), bodyText: renderTemplate(template.bodyText, fields) });
+    const bodyText = renderTemplate(template.bodyText, fields);
+    previews.push({ contactId: contactId.toHexString(), to: contact.emailNormalized, subject: renderTemplate(template.subject, fields), bodyText, bodyHtml: formatEmailBody(bodyText) });
   }
   return { senderAddress: grant.gmailAddress as string, template, resume, previews, skipped };
 }

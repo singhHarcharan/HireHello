@@ -14,6 +14,7 @@ export interface Delivery {
   to: string;
   renderedSubject: string;
   renderedBody: string;
+  renderedHtml?: string;
   status: 'queued' | 'sending' | 'accepted' | 'failed' | 'skipped' | 'uncertain';
   attemptCount: number;
   nextAttemptAt?: Date;
@@ -94,7 +95,7 @@ async function processOne(db: Db, delivery: Delivery, deps: ProcessorDependencie
   }
   let raw: string;
   try {
-    raw = await buildRawMime({ from: campaign.senderAddress, to: delivery.to, subject: delivery.renderedSubject, body: delivery.renderedBody, pdf });
+    raw = await buildRawMime({ from: campaign.senderAddress, to: delivery.to, subject: delivery.renderedSubject, body: delivery.renderedBody, bodyHtml: delivery.renderedHtml ?? null, pdf });
   } catch {
     await finish(db, delivery, 'failed', { errorCode: 'invalid_message' });
     return;

@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { formatEmailBody } from '../core/email-body';
 
 const SINGLE_EMAIL = /^[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]+$/;
 const CRLF = '\r\n';
@@ -29,12 +30,27 @@ export async function buildRawMime(input: {
   to: string;
   subject: string;
   body: string;
+  /** null keeps legacy queued messages plain text; otherwise use approved HTML. */
+  bodyHtml?: string | null;
   pdf: Buffer;
 }): Promise<string> {
   if (!SINGLE_EMAIL.test(input.from) || !SINGLE_EMAIL.test(input.to)) throw new Error('invalid_email_address');
   if (!input.subject.trim() || /[\r\n]/.test(input.subject)) throw new Error('invalid_subject');
   if (!input.pdf.subarray(0, 5).equals(Buffer.from('%PDF-'))) throw new Error('invalid_pdf');
   const boundary = `hirehello_${randomBytes(18).toString('hex')}`;
+  const alternative = `alternative_${randomBytes(18).toString('hex')}`;
+  const html = input.bodyHtml === undefined ? formatEmailBody(input.body) : input.bodyHtml;
+  const textPart = [
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: base64', '', base64Lines(Buffer.from(input.body, 'utf8')),
+  ];
+  const bodyParts = html === null ? textPart : [
+    `Content-Type: multipart/alternative; boundary="${alternative}"`, '',
+    `--${alternative}`, ...textPart,
+    `--${alternative}`, 'Content-Type: text/html; charset=UTF-8',
+    'Content-Transfer-Encoding: base64', '', base64Lines(Buffer.from(html, 'utf8')),
+    `--${alternative}--`, '',
+  ];
   const mime = [
     `From: ${input.from}`,
     `To: ${input.to}`,
@@ -43,10 +59,7 @@ export async function buildRawMime(input: {
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     '',
     `--${boundary}`,
-    'Content-Type: text/plain; charset=UTF-8',
-    'Content-Transfer-Encoding: base64',
-    '',
-    base64Lines(Buffer.from(input.body, 'utf8')),
+    ...bodyParts,
     `--${boundary}`,
     'Content-Type: application/pdf; name="resume.pdf"',
     'Content-Disposition: attachment; filename="resume.pdf"',

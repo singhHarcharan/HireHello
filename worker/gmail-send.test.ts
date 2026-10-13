@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { buildRawMime, sendRawWithGmail } from '../lib/gmail/send';
+import { formatEmailBody } from '../lib/core/email-body';
 
 const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF');
 
-test('one recipient receives personalized plain-text MIME with PDF attachment', async () => {
+test('one recipient receives alternative plain text and HTML inside mixed MIME with PDF', async () => {
   const raw = await buildRawMime({
     from: 'candidate@example.com', to: 'recruiter@example.com',
     subject: 'Hello Acme', body: 'Hi Maya,\nI would like to work at Acme.', pdf,
@@ -13,11 +14,29 @@ test('one recipient receives personalized plain-text MIME with PDF attachment', 
   assert.match(mime, /To: recruiter@example\.com/);
   assert.match(mime, /Subject: =\?UTF-8\?B\?SGVsbG8gQWNtZQ==\?=/);
   assert.match(mime, /Content-Type: text\/plain/);
+  assert.match(mime, /Content-Type: multipart\/alternative/);
+  assert.match(mime, /Content-Type: text\/html/);
+  const encodedHtml = mime.match(/Content-Type: text\/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n([\s\S]+?)\r\n--alternative_/);
+  assert.ok(encodedHtml);
+  assert.equal(Buffer.from(encodedHtml[1].replace(/\r\n/g, ''), 'base64').toString('utf8'), formatEmailBody('Hi Maya,\nI would like to work at Acme.'));
+  const outer = mime.match(/multipart\/mixed; boundary="([^"]+)"/)![1];
+  const inner = mime.match(/multipart\/alternative; boundary="([^"]+)"/)![1];
+  assert.ok(mime.indexOf(`--${inner}--`) < mime.indexOf('Content-Type: application/pdf'));
+  assert.ok(mime.endsWith(`--${outer}--\r\n`));
   assert.match(mime, /Content-Type: application\/pdf/);
   assert.match(mime, /filename="resume\.pdf"/);
   assert.ok(mime.includes(Buffer.from('Hi Maya,\nI would like to work at Acme.').toString('base64')));
   assert.ok(mime.includes(pdf.toString('base64')));
   assert.ok(!mime.includes('another@example.com'));
+});
+
+test('legacy queued mail stays plain text and new mail uses the exact approved HTML snapshot', async () => {
+  const input = { from: 'candidate@example.com', to: 'recruiter@example.com', subject: 'Hi', body: 'Hello', pdf };
+  const legacy = Buffer.from(await buildRawMime({ ...input, bodyHtml: null }), 'base64url').toString();
+  assert.ok(!legacy.includes('text/html'));
+  const approved = '<div>Previously approved formatting</div>';
+  const current = Buffer.from(await buildRawMime({ ...input, bodyHtml: approved }), 'base64url').toString();
+  assert.ok(current.includes(Buffer.from(approved).toString('base64')));
 });
 
 test('Gmail sender posts base64url MIME once with the bearer token', async () => {

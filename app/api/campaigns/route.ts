@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     await finished(upload);
     const deliveryDocs = prepared.previews.map(item => ({
       userId: user.id, campaignId, contactId: new ObjectId(item.contactId), to: item.to,
-      renderedSubject: item.subject, renderedBody: item.bodyText,
+      renderedSubject: item.subject, renderedBody: item.bodyText, renderedHtml: item.bodyHtml,
       status: 'queued', attemptCount: 0, leaseUntil: null, gmailMessageId: null,
       errorCode: null, createdAt: now, updatedAt: now,
     }));

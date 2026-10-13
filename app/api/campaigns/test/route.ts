@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     }
     if (size !== resume.size) throw new ApiError(409, 'RESUME_CHANGED', 'Resume changed');
     const pdf = Buffer.concat(pdfChunks);
-    const raw = await buildRawMime({ from: grant.gmailAddress, to: grant.gmailAddress, subject: first.subject, body: first.bodyText, pdf });
+    const raw = await buildRawMime({ from: grant.gmailAddress, to: grant.gmailAddress, subject: first.subject, body: first.bodyText, bodyHtml: first.bodyHtml, pdf });
     if (await db.collection('test_sends').countDocuments({ userId: user.id, createdAt: { $gte: new Date(Date.now() - 24 * 3600_000) } }) >= 3) throw new ApiError(429, 'RATE_LIMITED', 'Limit of three test sends per 24 hours reached');
     try { await db.collection('test_sends').insertOne({ userId: user.id, idempotencyKey, requestHash, status: 'sending', to: grant.gmailAddress, createdAt: new Date() }); }
     catch (error) {

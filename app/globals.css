@@ -411,3 +411,15 @@ td .row { flex-wrap: nowrap; gap: 2px; }
 @keyframes toast-countdown { to { transform:scaleX(0); } }
 @media(max-width:700px) { .toast-viewport { inset:12px 12px auto auto; width:calc(100vw - 24px); } }
 @media(prefers-reduced-motion:reduce) { .toast, .toast-timer { animation:none; } }
+
+/* The inner email styles are shared with MIME; this frame belongs only to the app. */
+.email-body { background: white; padding: 18px; border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.preview > .email-body { margin-top: 16px; line-height: normal; }
+.email-body p:last-child { margin-bottom: 0 !important; }
+.email-editor-heading { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.email-view-switch { display: flex; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: #f4f6f1; }
+.email-view-switch button { border: 0; padding: 7px 10px; font-size: 12px; border-radius: 5px; color: var(--muted); background: transparent; }
+.email-view-switch button[aria-pressed="true"] { color: var(--primary); background: white; box-shadow: 0 1px 3px #203a231c; font-weight: 650; }
+.email-editor-preview { margin-top: 6px; }
+#template-body { width: 100%; min-height: 300px; line-height: 1.65; margin-bottom: 10px; }
+.email-format-help { line-height: 1.65; margin: 4px 0 0; }

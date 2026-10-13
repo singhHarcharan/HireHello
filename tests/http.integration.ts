@@ -81,6 +81,7 @@ try {
   status(await request(`/api/campaigns/${campaignId}/dispatch`,'POST'),200,'restart scheduling');
   status(await request(`/api/campaigns/${campaignId}/dispatch`,'POST'),429,'scheduling recovery rate limited');
   const delivery=await db.collection('deliveries').findOne({campaignId:new ObjectId(campaignId)});assert.ok(delivery);
+  assert.equal(delivery.renderedHtml, preview.data.previews[0].bodyHtml); assert.match(delivery.renderedHtml, /QA Tester/); checks++;
   status(await request(`/api/deliveries/${delivery._id}/retry`,'POST'),409,'queued delivery cannot be duplicated by retry');
   await db.collection('deliveries').updateOne({_id:delivery._id},{$set:{status:'uncertain'}});
   status(await request(`/api/deliveries/${delivery._id}/retry`,'POST'),409,'uncertain delivery cannot be resent');
