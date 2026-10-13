@@ -11,6 +11,9 @@ import { ConfirmDialog, type Confirmation } from "@/app/components/hirehello/con
 import { ContactList } from "@/app/components/hirehello/contact-list";
 import { MAX_RESUME_UPLOAD_BYTES } from "@/lib/core/resume-upload-limit";
 
+import { useNotifications } from "@/app/components/hirehello/notifications";
+import { campaignNotifications } from "@/lib/core/campaign-notifications";
+
 type Tab = "overview" | "materials" | "contacts" | "compose" | "campaigns";
 type Connection = { connected: boolean; email?: string; status?: string };
 type Review = { previewToken: string; senderAddress?: string; resume?: Resume; previews: Preview[]; skipped?: { contactId?: string; reason?: string }[] };
@@ -44,6 +47,10 @@ function friendlyStatus(status?: string) {
 export default function Dashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const notify = useNotifications();
+  const campaignSnapshot = useRef<Campaign[] | null>(null);
+  const pollingFailed = useRef(false);
+  const initialLoad = useRef(true);
   const [tab, setActiveTab] = useState<Tab>("overview");
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [recipientSearch, setRecipientSearch] = useState("");
@@ -64,7 +71,7 @@ export default function Dashboard() {
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState<{ error: boolean; message: string } | null>(null);
+
   const [templateForm, setTemplateForm] = useState({ id: "", name: "", subject: "", bodyText: "" });
   const [resumeLabel, setResumeLabel] = useState("");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -84,11 +91,14 @@ export default function Dashboard() {
     const activeTab = params.get("tab");
     if (tabs.some(item => item.id === activeTab)) setActiveTab(activeTab as Tab);
     const gmail = params.get("gmail");
-    if (gmail === "connected") setFeedback({ error: false, message: "Gmail connected. Your mailbox is ready for reviewed campaigns." });
-    else if (gmail && gmail !== "connected") setFeedback({ error: true, message: gmailConnectionErrors[gmail] || "Gmail connection could not be completed. Please try again." });
-  }, []);
+    if (gmail === "connected") notify({ tone: "success", message: "Gmail connected. Your mailbox is ready for reviewed campaigns." });
+    else if (gmail && gmail !== "connected") notify({ tone: "error", message: gmailConnectionErrors[gmail] || "Gmail connection could not be completed. Please try again." });
+    if (gmail) { const url = new URL(window.location.href); url.searchParams.delete("gmail"); window.history.replaceState(null, "", url); }
+  }, [notify]);
 
   const refresh = useCallback(async () => {
+    const noticeId = initialLoad.current ? notify({ tone: "loading", message: "Loading your workspace…" }) : undefined;
+    initialLoad.current = false;
     try {
       const [g, t, r, c, campaignsResult] = await Promise.all([
         api<Connection>("/api/gmail/connection"),
@@ -97,36 +107,51 @@ export default function Dashboard() {
         api<{ contacts: Contact[] }>("/api/contacts"),
         api<{ campaigns: Campaign[] }>("/api/campaigns")
       ]);
+      campaignSnapshot.current = campaignsResult.campaigns || [];
       setReview(null); testSendKey.current = "";
       setConnection(g); setTemplates(t.templates || []); setResumes(r.resumes || []); setContacts(c.contacts || []); setCampaigns(campaignsResult.campaigns || []);
-    } catch (error) { setFeedback({ error: true, message: error instanceof Error ? error.message : "Could not load your workspace." }); }
+      if (noticeId) notify({ id: noticeId, tone: "success", message: "Your workspace is ready." });
+    } catch (error) { notify({ id: noticeId || "workspace-refresh", tone: "error", message: `Could not refresh your workspace: ${error instanceof Error ? error.message : "Please reload to try again."}` }); }
     finally { setLoading(false); }
-  }, []);
+  }, [notify]);
   useEffect(() => { if (status === "authenticated") void refresh(); }, [status, refresh]);
   const refreshCampaign = useCallback(async (id: string) => {
     try {
       const data = await api<{ campaign: Campaign; deliveries: Delivery[] }>(`/api/campaigns/${encodeURIComponent(id)}`);
       setSelectedCampaign(data.campaign); setDeliveries(data.deliveries || []);
-    } catch (error) { setFeedback({ error: true, message: error instanceof Error ? error.message : "Could not load campaign." }); }
-  }, []);
+    } catch (error) { notify({ tone: "error", message: error instanceof Error ? error.message : "Could not load campaign." }); }
+  }, [notify]);
   const hasPendingOutreach = contacts.some(contact => contact.outreachStatus === "scheduled") || campaigns.some(campaign => ["queued", "running", "sending", "active"].includes(campaign.status));
   useEffect(() => {
     if (status !== "authenticated") return;
+    let cancelled = false;
+    let inFlight = false;
     async function syncOutreach() {
-      if (document.visibilityState !== "visible") return;
+      if (document.visibilityState !== "visible" || inFlight) return;
+      inFlight = true;
       try {
-        const [contactResult, campaignResult] = await Promise.all([
-          api<{ contacts: Contact[] }>("/api/contacts"), api<{ campaigns: Campaign[] }>("/api/campaigns")
+        const [contactResult, campaignResult, gmail, detail] = await Promise.all([
+          api<{ contacts: Contact[] }>("/api/contacts"), api<{ campaigns: Campaign[] }>("/api/campaigns"), api<Connection>("/api/gmail/connection"),
+          selectedCampaign?.id ? api<{ campaign: Campaign; deliveries: Delivery[] }>(`/api/campaigns/${encodeURIComponent(selectedCampaign.id)}`) : Promise.resolve(null)
         ]);
-        setContacts(contactResult.contacts); setCampaigns(campaignResult.campaigns);
-        if (selectedCampaign?.id) await refreshCampaign(selectedCampaign.id);
-      } catch { /* Preserve the current view; the next poll or manual refresh can recover. */ }
+        if (cancelled) return;
+        for (const notice of campaignNotifications(campaignSnapshot.current, campaignResult.campaigns)) notify(notice);
+        campaignSnapshot.current = campaignResult.campaigns;
+        if (pollingFailed.current) { notify({ id: "background-sync", tone: "success", message: "Live updates reconnected." }); pollingFailed.current = false; }
+        if (connection.connected && !gmail.connected) notify({ id: "gmail-connection", tone: "error", message: "Gmail needs reconnecting. Open Overview to restore sending." });
+        setConnection(gmail); setContacts(contactResult.contacts); setCampaigns(campaignResult.campaigns);
+        if (detail) { setSelectedCampaign(detail.campaign); setDeliveries(detail.deliveries || []); }
+      } catch {
+        if (!cancelled && !pollingFailed.current) { pollingFailed.current = true; notify({ id: "background-sync", tone: "error", message: "Live updates are temporarily unavailable. Retrying automatically; queued work may still continue." }); }
+      } finally { inFlight = false; }
     }
-    const interval = hasPendingOutreach ? window.setInterval(() => void syncOutreach(), 5000) : undefined;
+    // A quiet poll also discovers work started in another tab. No toast is shown
+    // for a successful poll unless an actual campaign/connection state changes.
+    const interval = window.setInterval(() => void syncOutreach(), hasPendingOutreach ? 5000 : 30000);
     window.addEventListener("focus", syncOutreach);
     document.addEventListener("visibilitychange", syncOutreach);
-    return () => { window.clearInterval(interval); window.removeEventListener("focus", syncOutreach); document.removeEventListener("visibilitychange", syncOutreach); };
-  }, [status, hasPendingOutreach, selectedCampaign?.id, refreshCampaign]);
+    return () => { cancelled = true; window.clearInterval(interval); window.removeEventListener("focus", syncOutreach); document.removeEventListener("visibilitychange", syncOutreach); };
+  }, [status, hasPendingOutreach, selectedCampaign?.id, notify, connection.connected]);
   useEffect(() => {
     const eligible = selectedContacts.filter(id => contacts.some(contact => contact.id === id && contact.outreachStatus === "ready"));
     if (eligible.length !== selectedContacts.length) { setSelectedContacts(eligible); setReview(null); }
@@ -134,16 +159,19 @@ export default function Dashboard() {
 
   function requestConfirmation(options: Omit<Confirmation, "action">, task: () => Promise<void>, success: string) {
     setConfirmation({ ...options, action: async () => {
-      setBusy(true); setFeedback(null);
-      try { await task(); setFeedback({ error: false, message: success }); }
+      setBusy(true);
+      const id = notify({ tone: "loading", message: `${options.label}…` });
+      try { await task(); notify({ id, tone: "success", message: success }); }
+      catch (error) { notify({ id, tone: "error", message: error instanceof Error ? error.message : "Something went wrong. Please try again." }); throw error; }
       finally { setBusy(false); }
     } });
   }
 
-  async function run(task: () => Promise<void>, success?: string) {
-    setBusy(true); setFeedback(null);
-    try { await task(); if (success) setFeedback({ error: false, message: success }); }
-    catch (error) { setFeedback({ error: true, message: error instanceof Error ? error.message : "Something went wrong. Please try again." }); }
+  async function run(task: () => Promise<void>, success = "Done.", pending = "Working on your request…") {
+    setBusy(true);
+    const id = notify({ tone: "loading", message: pending });
+    try { await task(); notify({ id, tone: "success", message: success }); }
+    catch (error) { notify({ id, tone: "error", message: error instanceof Error ? error.message : "Something went wrong. Please try again." }); }
     finally { setBusy(false); }
   }
   async function saveTemplate(event: React.FormEvent<HTMLFormElement>) {
@@ -152,7 +180,7 @@ export default function Dashboard() {
       const { id, ...body } = templateForm;
       await api(id ? `/api/templates/${encodeURIComponent(id)}` : "/api/templates", json(id ? "PATCH" : "POST", body));
       setTemplateForm({ id:"",name:"",subject:"",bodyText:"" }); await refresh();
-    }, "Template saved.");
+    }, "Template saved.", "Saving your template…");
   }
   async function uploadResume(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!resumeFile) return;
@@ -160,7 +188,7 @@ export default function Dashboard() {
       const data = new FormData(); data.append("file", resumeFile); data.append("label", resumeLabel.trim() || resumeFile.name);
       await api("/api/resumes", { method:"POST", body:data });
       setResumeFile(null); setResumeLabel(""); if (resumeInput.current) resumeInput.current.value = ""; await refresh();
-    }, "Résumé uploaded.");
+    }, "Résumé uploaded.", "Uploading your résumé…");
   }
   async function addContact(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -168,12 +196,12 @@ export default function Dashboard() {
       const { id, ...body } = contactForm;
       await api(id ? `/api/contacts/${encodeURIComponent(id)}` : "/api/contacts", json(id ? "PATCH" : "POST", body));
       setContactForm({ id:"",recruiterName:"",email:"",companyName:"" }); await refresh();
-    }, contactForm.id ? "Contact updated." : "Contact added.");
+    }, contactForm.id ? "Contact updated." : "Contact added.", "Saving your contact…");
   }
   async function importCsv(file: File) {
     setImportResult(null);
     if (file.size > 256_000 || !file.name.toLowerCase().endsWith(".csv")) {
-      setFeedback({error:true,message:"Choose a CSV file under 256 KB."});
+      notify({tone:"error",message:"Choose a CSV file under 256 KB."});
       if (csvInput.current) csvInput.current.value = "";
       return;
     }
@@ -181,7 +209,7 @@ export default function Dashboard() {
       const data = new FormData(); data.append("file", file);
       const result = await api<ImportResult>("/api/contacts/import", { method:"POST", body:data });
       setImportResult(result); await refresh();
-    }, "CSV import finished.");
+    }, "CSV import finished. Review the import summary for skipped rows.", "Importing contacts…");
     if (csvInput.current) csvInput.current.value = "";
   }
   async function previewCampaign(event: React.FormEvent<HTMLFormElement>) {
@@ -189,7 +217,7 @@ export default function Dashboard() {
     await run(async () => {
       const data = await api<Review>("/api/campaigns/preview", json("POST", { ...campaignForm, contactIds:selectedContacts }));
       setReview(data); setIdempotencyKey(newIdempotencyKey()); testSendKey.current = newIdempotencyKey();
-    });
+    }, "Preview ready. Review each message before sending.", "Preparing personalized previews…");
   }
   async function sendTest() {
     if (!review?.previews.length || !connection.connected) return;
@@ -197,7 +225,7 @@ export default function Dashboard() {
       await api("/api/campaigns/test", json("POST", {
         ...campaignForm, contactIds: selectedContacts, previewToken: review.previewToken
       }, { "Idempotency-Key": testSendKey.current }));
-    }, `Test message accepted by Gmail for ${connection.email || "your own mailbox"}.`);
+    }, `Test message accepted by Gmail for ${connection.email || "your own mailbox"}.`, "Sending your test email…");
   }
   function createCampaign() {
     if (!review || !connection.connected) return;
@@ -211,6 +239,7 @@ export default function Dashboard() {
   function updateCampaignForm(change: Partial<typeof campaignForm>) { setCampaignForm(prev => ({...prev,...change})); setReview(null); }
   function toggleContact(id: string) { setSelectedContacts(prev => prev.includes(id) ? prev.filter(item => item !== id) : prev.length < 20 ? [...prev,id] : prev); setReview(null); }
   function useStarterTemplate() {
+    notify({ tone: "info", message: "Starter template added to the editor. Make it yours, then save." });
     setTemplateForm({ id: "", name: "A friendly introduction", subject: "Exploring opportunities at {{companyName}}", bodyText: "Hi {{recruiterName}},\n\nI’m interested in opportunities at {{companyName}}. My background is in [your field], with experience in [a relevant skill or achievement].\n\nI’ve attached my résumé and would love to learn whether there’s a role where I could contribute. Would you be open to a short conversation?\n\nThank you for your time,\n{{senderName}}" });
   }
   const matchesContact = (c: Contact, query: string) => `${c.recruiterName} ${c.email || c.emailNormalized} ${c.companyName}`.toLowerCase().includes(query.trim().toLowerCase());
@@ -233,7 +262,7 @@ export default function Dashboard() {
     const rows = [["email","status","errorCode","gmailMessageId"], ...deliveries.map(d => [d.to,d.status,d.errorCode || "",String((d as Delivery & { gmailMessageId?: string }).gmailMessageId || "")])];
     const csv = rows.map(row => row.map(cell => `"${cell.replaceAll('"','""')}"`).join(",")).join("\r\n");
     const url = URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
-    const link = document.createElement("a"); link.href = url; link.download = `hirehello-${selectedCampaign.id}.csv`; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const link = document.createElement("a"); link.href = url; link.download = `hirehello-${selectedCampaign.id}.csv`; link.click(); notify({ tone: "success", message: "CSV export prepared. Your browser will download the file." }); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   if (status === "loading" || loading) return <main className="auth-shell"><Brand /><span className="loading-ring" aria-hidden="true" /><p className="muted" role="status">Getting your workspace ready…</p></main>;
@@ -243,15 +272,13 @@ export default function Dashboard() {
     <aside className="sidebar">
       <a href="/dashboard" aria-label="HireHello home"><Brand /></a>
       <div className="sidebar-label">Your workspace</div>
-      <nav className="nav-tabs" aria-label="Workspace sections">{tabs.map(item => <button key={item.id} type="button" title={item.label} className={tab === item.id ? "active" : ""} aria-current={tab === item.id ? "page" : undefined} onClick={() => { setTab(item.id); setFeedback(null); }}><Icon name={item.icon} /><span>{item.label}</span>{item.id === "contacts" && contacts.length > 0 && <span className="nav-count">{availableContacts.length}</span>}</button>)}</nav>
-      <div className="sidebar-bottom"><div className="sidebar-tip"><Icon name="shield" /><strong>Your voice. Your inbox.</strong><p>Every message is reviewed by you and sent from your Gmail.</p></div><div className="sidebar-account"><span className="avatar">{session?.user?.name?.slice(0,1) || "H"}</span><div><strong>{session?.user?.name?.split(" ")[0] || "My account"}</strong><span>Personal workspace</span></div><button className="icon-button" title="Sign out" aria-label="Sign out" onClick={() => void signOut({ callbackUrl: "/" })}><Icon name="logout" size={18} /></button></div></div>
+      <nav className="nav-tabs" aria-label="Workspace sections">{tabs.map(item => <button key={item.id} type="button" title={item.label} className={tab === item.id ? "active" : ""} aria-current={tab === item.id ? "page" : undefined} onClick={() => { setTab(item.id); }}><Icon name={item.icon} /><span>{item.label}</span>{item.id === "contacts" && contacts.length > 0 && <span className="nav-count">{availableContacts.length}</span>}</button>)}</nav>
+      <div className="sidebar-bottom"><div className="sidebar-tip"><Icon name="shield" /><strong>Your voice. Your inbox.</strong><p>Every message is reviewed by you and sent from your Gmail.</p></div><div className="sidebar-account"><span className="avatar">{session?.user?.name?.slice(0,1) || "H"}</span><div><strong>{session?.user?.name?.split(" ")[0] || "My account"}</strong><span>Personal workspace</span></div><button className="icon-button" title="Sign out" aria-label="Sign out" onClick={() => void run(async () => { await signOut({ redirect: false }); router.replace("/"); }, "Signed out.", "Signing out…")}><Icon name="logout" size={18} /></button></div></div>
     </aside>
     <div className="workspace">
     <header className="app-header"><div className="app-header-inner"><span className="breadcrumb">Workspace <span>/</span> <strong>{currentPage.label}</strong></span><span className={`connection-pill ${connection.connected ? "connected" : ""}`}><span className="status-dot" />{connection.connected ? "Gmail connected" : "Gmail not connected"}</span></div></header>
     <main className="app-main" id="workspace-content">
       <div className="page-heading"><div><div className="eyebrow">{tab === "overview" ? "Make your next move" : "Your outreach workspace"}</div><h1 className="page-title">{tab === "overview" ? `Hello, ${session?.user?.name?.split(" ")[0] || "there"}.` : currentPage.label}</h1><p className="muted">{currentPage.description}</p></div>{tab !== "compose" && <button className="button" onClick={() => setTab("compose")}><Icon name="plus" size={18} />New campaign</button>}</div>
-      {feedback && <div role={feedback.error ? "alert" : "status"} className={`alert feedback-banner ${feedback.error ? "error" : ""}`}><span>{feedback.message}</span><button className="icon-button" aria-label="Dismiss message" onClick={() => setFeedback(null)}><Icon name="close" size={16} /></button></div>}
-      {busy && <div className="working-indicator" role="status"><span className="loading-ring" />Working…</div>}
 
       {tab === "overview" && <div className="stack overview-stack">
         <section className="welcome-banner"><div><span className="banner-label"><span className="status-dot" />A thoughtful hello goes a long way</span><h2>{readyToCompose ? "Your next opportunity starts here." : "Let’s get your first hello ready."}</h2><p>{readyToCompose ? "Your materials and contacts are ready. Bring them together in a personal introduction." : "Set up your essentials once. Then spend more time finding the right people."}</p>{nextStep?.href ? <a className="button button-light" href={nextStep.href}>{nextStep.label}<Icon name="arrow" size={18} /></a> : <button className="button button-light" onClick={() => setTab(nextStep?.tab || "compose")}>{nextStep?.label || "Create a campaign"}<Icon name="arrow" size={18} /></button>}</div><div className="banner-art" aria-hidden="true"><div className="letter-card"><span className="letter-stamp"><Icon name="mail" size={26} /></span><span className="letter-greeting">Hello, opportunity.</span><span className="letter-line"/><span className="letter-line short"/><div className="letter-footer"><span className="mini-avatar">You</span><span>A personal introduction</span><Icon name="check" size={16}/></div></div><span className="art-spark spark-one">✳</span><span className="art-spark spark-two">+</span></div></section>
@@ -268,7 +295,7 @@ export default function Dashboard() {
           <form className="stack" onSubmit={saveTemplate}><div className="field"><label htmlFor="template-name">Template name</label><input id="template-name" required maxLength={80} value={templateForm.name} onChange={e => setTemplateForm({...templateForm,name:e.target.value})} placeholder="Software engineering introduction" /></div><div className="field"><label htmlFor="template-subject">Subject</label><input id="template-subject" required maxLength={180} value={templateForm.subject} onChange={e => setTemplateForm({...templateForm,subject:e.target.value})} placeholder="Exploring roles at {{companyName}}" /></div><div className="field"><label htmlFor="template-body">Email body</label><textarea id="template-body" required maxLength={12000} value={templateForm.bodyText} onChange={e => setTemplateForm({...templateForm,bodyText:e.target.value})} placeholder={"Hi {{recruiterName}},\n\nI’m interested in opportunities at {{companyName}}…\n\nThanks,\n{{senderName}}"}/></div><div className="merge-help"><span>Personalize with</span>{["recruiterName","companyName","senderName"].map(field=><button type="button" key={field} title={`Insert ${field} in email body`} onClick={()=>setTemplateForm(prev=>({...prev,bodyText:prev.bodyText + `{{${field}}}`}))}>{`{{${field}}}`}</button>)}</div><div className="row"><button className="button" disabled={busy}>{templateForm.id ? "Save changes" : "Save template"}</button>{(templateForm.id || templateForm.name || templateForm.subject || templateForm.bodyText) && <button type="button" className="button button-secondary" onClick={() => setTemplateForm({id:"",name:"",subject:"",bodyText:""})}>{templateForm.id ? "Cancel edit" : "Clear draft"}</button>}</div></form>
           <hr className="divider"/><div className="list">{templates.length ? templates.map(t => <div className="list-item" key={t.id}><div><strong>{t.name}</strong><p>{t.subject}</p></div><div className="row"><button type="button" className="button-plain" onClick={() => setTemplateForm({id:t.id,name:t.name,subject:t.subject,bodyText:t.bodyText})}>Edit</button><button type="button" className="button-plain" disabled={busy} onClick={() => requestConfirmation({ title: "Delete this template?", description: "This removes the template from your materials. Existing campaigns keep their saved email content. This action cannot be undone.", label: "Delete template", subject: t.name, icon: "layers" }, async () => { await api(`/api/templates/${encodeURIComponent(t.id)}`, {method:"DELETE"}); if (templateForm.id === t.id) setTemplateForm({id:"",name:"",subject:"",bodyText:""}); await refresh(); }, "Template deleted.")}>Delete</button></div></div>) : <div className="empty">Your saved templates will live here. Start with a draft above.</div>}</div>
         </section>
-        <section className="card"><div className="section-heading"><div><h2>Résumés</h2><p className="muted small">PDF only, up to 4 MB.</p></div></div><form className="stack" onSubmit={uploadResume}><div className="field"><label htmlFor="resume-label">Résumé name</label><input id="resume-label" required maxLength={100} value={resumeLabel} onChange={e => setResumeLabel(e.target.value)} placeholder="Backend engineer · 2026" /></div><div className="field"><label htmlFor="resume-file">PDF file</label><input ref={resumeInput} className="file-input" id="resume-file" type="file" accept="application/pdf,.pdf" required onChange={e => { const file = e.target.files?.[0] || null; if (file && (file.size > MAX_RESUME_UPLOAD_BYTES || !file.name.toLowerCase().endsWith(".pdf"))) { setFeedback({error:true,message:"Choose a PDF résumé up to 4 MB."}); e.target.value = ""; setResumeFile(null); return; } setResumeFile(file); if (file && !resumeLabel) setResumeLabel(file.name.replace(/\.pdf$/i,"")); }}/></div><button className="button" disabled={busy || !resumeFile}>Upload résumé</button></form><hr className="divider"/><div className="list">{resumes.length ? resumes.map(r => <div className="list-item" key={r.id}><div><strong>{r.label}</strong><p>{r.filename || "PDF"}{r.size ? ` · ${(r.size/1024/1024).toFixed(1)} MB` : ""}</p></div><button type="button" className="button-plain" disabled={busy} onClick={() => requestConfirmation({ title: "Delete this résumé?", description: "This removes the PDF from your materials. Existing campaigns keep their saved attachment. This action cannot be undone.", label: "Delete résumé", subject: r.label, icon: "file" }, async () => { await api(`/api/resumes/${encodeURIComponent(r.id)}`, {method:"DELETE"}); await refresh(); }, "Résumé deleted.")}>Delete</button></div>) : <div className="empty">Upload a PDF once, then reuse it in any campaign.</div>}</div></section>
+        <section className="card"><div className="section-heading"><div><h2>Résumés</h2><p className="muted small">PDF only, up to 4 MB.</p></div></div><form className="stack" onSubmit={uploadResume}><div className="field"><label htmlFor="resume-label">Résumé name</label><input id="resume-label" required maxLength={100} value={resumeLabel} onChange={e => setResumeLabel(e.target.value)} placeholder="Backend engineer · 2026" /></div><div className="field"><label htmlFor="resume-file">PDF file</label><input ref={resumeInput} className="file-input" id="resume-file" type="file" accept="application/pdf,.pdf" required onChange={e => { const file = e.target.files?.[0] || null; if (file && (file.size > MAX_RESUME_UPLOAD_BYTES || !file.name.toLowerCase().endsWith(".pdf"))) { notify({tone:"error",message:"Choose a PDF résumé up to 4 MB."}); e.target.value = ""; setResumeFile(null); return; } setResumeFile(file); if (file && !resumeLabel) setResumeLabel(file.name.replace(/\.pdf$/i,"")); }}/></div><button className="button" disabled={busy || !resumeFile}>Upload résumé</button></form><hr className="divider"/><div className="list">{resumes.length ? resumes.map(r => <div className="list-item" key={r.id}><div><strong>{r.label}</strong><p>{r.filename || "PDF"}{r.size ? ` · ${(r.size/1024/1024).toFixed(1)} MB` : ""}</p></div><button type="button" className="button-plain" disabled={busy} onClick={() => requestConfirmation({ title: "Delete this résumé?", description: "This removes the PDF from your materials. Existing campaigns keep their saved attachment. This action cannot be undone.", label: "Delete résumé", subject: r.label, icon: "file" }, async () => { await api(`/api/resumes/${encodeURIComponent(r.id)}`, {method:"DELETE"}); await refresh(); }, "Résumé deleted.")}>Delete</button></div>) : <div className="empty">Upload a PDF once, then reuse it in any campaign.</div>}</div></section>
       </div>}
 
       {tab === "contacts" && <div className="stack"><div className="outreach-banner"><span className="stat-icon"><Icon name="check"/></span><div><strong>Your contact list takes care of itself.</strong><p>After Gmail accepts a send, the person moves to Contacted. Their history stays saved, and they won’t appear in your next campaign.</p></div><span className="tag good">Automatic</span></div><div className="grid-2"><section className="card"><h2>{contactForm.id ? "Edit contact" : "Add a contact"}</h2><form className="stack" onSubmit={addContact}><div className="field"><label htmlFor="contact-name">Recruiter name</label><input id="contact-name" required maxLength={120} value={contactForm.recruiterName} onChange={e => setContactForm({...contactForm,recruiterName:e.target.value})}/></div><div className="field"><label htmlFor="contact-email">Email address</label><input id="contact-email" type="email" required maxLength={254} value={contactForm.email} onChange={e => setContactForm({...contactForm,email:e.target.value})}/></div><div className="field"><label htmlFor="contact-company">Company</label><input id="contact-company" required maxLength={120} value={contactForm.companyName} onChange={e => setContactForm({...contactForm,companyName:e.target.value})}/></div><div className="row"><button className="button" disabled={busy}>{contactForm.id ? "Save contact" : "Add contact"}</button>{contactForm.id && <button className="button button-secondary" type="button" onClick={()=>setContactForm({id:"",recruiterName:"",email:"",companyName:""})}>Cancel edit</button>}</div></form></section><section className="card"><h2>Import a CSV</h2><p className="muted">Use columns <code>email,recruiterName,companyName</code>. Invalid, duplicate, and suppressed rows are skipped.</p><a className="button-plain csv-example" href="/contact-import-example.csv" download><Icon name="file" size={16}/>Download example CSV</a><div className="field"><label htmlFor="contacts-csv">Choose CSV file</label><input ref={csvInput} className="file-input" id="contacts-csv" type="file" accept=".csv,text/csv" disabled={busy} onChange={e => { const file = e.target.files?.[0]; if (file) void importCsv(file); }}/></div>{importResult && <div className="alert" role="status">{importResult.valid} added · {importResult.duplicate} duplicates · {importResult.invalid} invalid · {importResult.suppressed} suppressed{importResult.errors?.length ? <ul>{importResult.errors.slice(0,5).map((item,index)=><li key={index}>Row {item.row}: {item.message}</li>)}</ul> : null}</div>}</section></div>

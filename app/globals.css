@@ -395,3 +395,19 @@ td .row { flex-wrap: nowrap; gap: 2px; }
 .legal-content li { margin: 10px 0; }
 .legal-content a, .fine-print a, .landing-footer a { text-decoration: underline; text-underline-offset: 3px; }
 @media(max-width:700px) { .legal-shell { padding: 0 20px; } .legal-content { margin: 36px auto 48px; } }
+
+/* Nonblocking notifications; manual popover also stays above modal dialogs. */
+.toast-viewport { position:fixed; inset:20px 20px auto auto; width:min(390px, calc(100vw - 32px)); margin:0; padding:0; border:0; background:transparent; color:var(--foreground); overflow:visible; z-index:10000; pointer-events:none; }
+.toast-viewport::backdrop { background:transparent; pointer-events:none; }
+.toast { position:relative; display:grid; grid-template-columns:32px 1fr 28px; align-items:start; gap:10px; padding:17px 14px 19px; margin-bottom:10px; border:1px solid var(--line); border-radius:14px; background:var(--surface); box-shadow:0 8px 30px #163a2720; overflow:hidden; pointer-events:auto; animation:toast-enter .2s ease-out; --toast-accent:var(--primary); }
+.toast strong { display:block; font-size:13px; line-height:1.4; }
+.toast p { margin:4px 0 0; font-size:13px; line-height:1.55; color:var(--muted); overflow-wrap:anywhere; }
+.toast-icon { display:grid; place-items:center; width:30px; height:30px; color:var(--toast-accent); background:var(--secondary); border-radius:9px; }
+.toast-error { --toast-accent:var(--danger); border-color:#edcec4; }
+.toast-error .toast-icon { background:#fcf0eb; }
+.toast-close { width:28px; height:28px; }
+.toast-timer { position:absolute; left:0; bottom:0; height:3px; width:100%; background:var(--toast-accent); opacity:.45; transform-origin:left; animation:toast-countdown var(--toast-duration) linear forwards; animation-play-state:var(--toast-play-state); }
+@keyframes toast-enter { from { opacity:0; transform:translateX(12px); } to { opacity:1; transform:translateX(0); } }
+@keyframes toast-countdown { to { transform:scaleX(0); } }
+@media(max-width:700px) { .toast-viewport { inset:12px 12px auto auto; width:calc(100vw - 24px); } }
+@media(prefers-reduced-motion:reduce) { .toast, .toast-timer { animation:none; } }
