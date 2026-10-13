@@ -25,7 +25,7 @@ export async function getContactOutreach(db: Db, userId: string, contacts: { ema
   const emails = contacts.map(contact => contact.emailNormalized);
   const [deliveries, suppressions] = await Promise.all([
     db.collection('deliveries').find({ userId, to: { $in: emails }, status: { $in: RESERVED_DELIVERY_STATUSES } })
-      .sort({ _id: -1 }).project<{ to: string; status: string; sentAt?: Date; campaignId?: { toString(): string } }>({ to: 1, status: 1, sentAt: 1, campaignId: 1 }).toArray(),
+      .sort({ sentAt: -1, _id: -1 }).project<{ to: string; status: string; sentAt?: Date; campaignId?: { toString(): string } }>({ to: 1, status: 1, sentAt: 1, campaignId: 1 }).toArray(),
     db.collection('suppressions').find({ userId, emailNormalized: { $in: emails } }).project({ emailNormalized: 1 }).toArray(),
   ]);
   const byEmail = new Map<string, typeof deliveries[number]>();

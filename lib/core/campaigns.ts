@@ -35,7 +35,7 @@ export async function prepareCampaign(user: { id: string; name: string }, input:
   if (contacts.length !== input.contactIds.length) throw new ApiError(400, 'CONTACT_NOT_FOUND', 'One or more contacts were not found');
   const suppressions = await db.collection('suppressions').find({ userId: user.id, emailNormalized: { $in: contacts.map(c => c.emailNormalized) } }).toArray();
   const suppressed = new Set(suppressions.map(s => s.emailNormalized));
-  const previous = await db.collection('deliveries').find({ userId: user.id, to: { $in: contacts.map(c => c.emailNormalized) }, status: { $in: RESERVED_DELIVERY_STATUSES } }).sort({ _id: -1 }).project({ to: 1, status: 1, sentAt: 1 }).toArray();
+  const previous = await db.collection('deliveries').find({ userId: user.id, to: { $in: contacts.map(c => c.emailNormalized) }, status: { $in: RESERVED_DELIVERY_STATUSES } }).sort({ sentAt: -1, _id: -1 }).project({ to: 1, status: 1, sentAt: 1 }).toArray();
   const pending = new Set(previous.filter(d => IN_FLIGHT_DELIVERY_STATUSES.includes(d.status)).map(d => d.to));
   const accepted = new Map<string, typeof previous[number]>();
   for (const delivery of previous) if (delivery.status === 'accepted' && !accepted.has(delivery.to)) accepted.set(delivery.to, delivery);

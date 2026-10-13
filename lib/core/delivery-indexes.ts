@@ -18,5 +18,5 @@ export async function ensureDeliveryIndexes(db: Db): Promise<void> {
     try { await deliveries.dropIndex('userId_1_to_1'); }
     catch (error) { if ((error as { code?: number }).code !== 27) throw error; }
   }
-  await deliveries.createIndex({ userId: 1, to: 1, _id: -1 });
+  await deliveries.createIndex({ userId: 1, to: 1, sentAt: -1, _id: -1 });
 }
